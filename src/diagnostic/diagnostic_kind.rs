@@ -494,10 +494,8 @@ impl From<&DiagnosticKind> for Level {
             | DiagnosticKind::DuplicateEnumVariant { .. }
             | DiagnosticKind::StructDoesNotHaveField { .. }
             | DiagnosticKind::EmptyStruct(_)
-            | DiagnosticKind::InvalidCostumeName(_)
             | DiagnosticKind::DuplicateCostume(_)
             | DiagnosticKind::DuplicateBackdrop(_)
-            | DiagnosticKind::InvalidBackdropName(_)
             | DiagnosticKind::InvalidCostumeFormat { .. }
             | DiagnosticKind::InvalidSoundFormat { .. }
             | DiagnosticKind::LocalNotSupported
@@ -505,6 +503,8 @@ impl From<&DiagnosticKind> for Level {
             | DiagnosticKind::UnknownDirective(_) => Level::Error,
 
             | DiagnosticKind::FollowedByUnreachableCode
+            | DiagnosticKind::InvalidCostumeName(_)
+            | DiagnosticKind::InvalidBackdropName(_)
             | DiagnosticKind::UnrecognizedKey(_)
             | DiagnosticKind::UnusedVariable(_)
             | DiagnosticKind::UnusedList(_)

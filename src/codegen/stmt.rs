@@ -339,10 +339,17 @@ impl Sb3 {
                     span: arg_span,
                 } = &arg_value
                 {
-                    // Validate costume names for switch_costume blocks
+                    // Validate costume names for switch_costume blocks. Like Scratch, accept
+                    // costume numbers and the special menu values; an unknown name is a no-op
+                    // in Scratch, so it is only a warning.
                     if let Block::SwitchCostume = block {
                         let costume_name = value.to_string();
-                        if !s.sprite.costumes.iter().any(|c| c.name == costume_name) {
+                        if !s.sprite.costumes.iter().any(|c| c.name == costume_name)
+                            && !is_costume_number_or_special(
+                                &costume_name,
+                                &["next costume", "previous costume"],
+                            )
+                        {
                             d.report(DiagnosticKind::InvalidCostumeName(costume_name), arg_span);
                         }
                     }
@@ -350,7 +357,12 @@ impl Sb3 {
                     if let Block::SwitchBackdrop = block {
                         let backdrop_name = value.to_string();
                         let stage = s.stage.unwrap_or(s.sprite);
-                        if !stage.costumes.iter().any(|c| c.name == backdrop_name) {
+                        if !stage.costumes.iter().any(|c| c.name == backdrop_name)
+                            && !is_costume_number_or_special(
+                                &backdrop_name,
+                                &["next backdrop", "previous backdrop", "random backdrop"],
+                            )
+                        {
                             d.report(DiagnosticKind::InvalidBackdropName(backdrop_name), arg_span);
                         }
                     }
@@ -611,4 +623,30 @@ impl Sb3 {
         }
         Ok(())
     }
+}
+
+/// Values that Scratch's switch costume/backdrop blocks accept besides a costume name: a special
+/// menu value, or text that is a number (a 1-based costume index, `Number(text)` not NaN and not
+/// whitespace).
+fn is_costume_number_or_special(value: &str, special: &[&str]) -> bool {
+    if special.contains(&value) {
+        return true;
+    }
+    let text = value.trim();
+    if text.is_empty() {
+        return false;
+    }
+    let lower = text.to_ascii_lowercase();
+    if matches!(text, "Infinity" | "+Infinity" | "-Infinity") {
+        return true;
+    }
+    if lower.contains("inf") || lower.contains("nan") {
+        return false;
+    }
+    for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
+        if let Some(digits) = lower.strip_prefix(prefix) {
+            return i64::from_str_radix(digits, radix).is_ok();
+        }
+    }
+    text.parse::<f64>().is_ok()
 }
