@@ -243,10 +243,10 @@ pub fn less_than_equal(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
-    Some(UnOp::Not.to_expr(
-        span.clone(),
-        BinOp::Gt.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone()),
-    ))
+    let mut inner = BinOp::Gt.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
+    // fold the new comparison, so constant operands fold through the rewrite
+    apply(&mut inner, bin_op);
+    Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 
 pub fn greater_than_equal(expr: &Expr) -> Option<Expr> {
@@ -259,10 +259,10 @@ pub fn greater_than_equal(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
-    Some(UnOp::Not.to_expr(
-        span.clone(),
-        BinOp::Lt.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone()),
-    ))
+    let mut inner = BinOp::Lt.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
+    // fold the new comparison, so constant operands fold through the rewrite
+    apply(&mut inner, bin_op);
+    Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 
 pub fn not_equal(expr: &Expr) -> Option<Expr> {
@@ -275,10 +275,10 @@ pub fn not_equal(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
-    Some(UnOp::Not.to_expr(
-        span.clone(),
-        BinOp::Eq.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone()),
-    ))
+    let mut inner = BinOp::Eq.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
+    // fold the new comparison, so constant operands fold through the rewrite
+    apply(&mut inner, bin_op);
+    Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 
 pub fn floor_div(expr: &Expr) -> Option<Expr> {

@@ -42,3 +42,11 @@ fn safe_simplifications_still_apply() {
     let b = build_main("var r = 0;\nonflag { r = \"007\" + 0; }");
     assert_eq!(input(&b, "data_setvariableto", "VALUE"), json!([1, [4, 7]]));
 }
+
+// Constant comparisons rewritten to `not (...)` (<=, >=, !=) still fold.
+#[test]
+fn rewritten_comparisons_fold() {
+    let b = build_main("onflag { say 1 <= 2; say 3 >= 4; say 1 != 1; }");
+    assert_eq!(count(&b, "operator_not"), 0);
+    assert_eq!(count(&b, "operator_gt") + count(&b, "operator_lt") + count(&b, "operator_equals"), 0);
+}
