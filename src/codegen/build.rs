@@ -66,6 +66,10 @@ pub struct BuildOptions {
     /// Derive block ids from the target, the enclosing script and the position in it instead
     /// of numbering all blocks of a target, so ids survive edits elsewhere (GBS-022).
     pub stable_ids: bool,
+    /// Turn off constant folding, algebraic simplification and dead-code removal: every
+    /// operator in the source is emitted as a block and every procedure/function is kept, so
+    /// the output means exactly what the source says (GBS-031, GBS-032, GBS-034, GBS-023).
+    pub no_fold: bool,
 }
 
 pub fn build_impl<T: Write + Seek>(
@@ -188,9 +192,10 @@ pub fn build_impl<T: Write + Seek>(
         &mut project,
         &mut stage_diagnostics,
         &mut sprites_diagnostics,
+        !options.no_fold,
     );
     visitor::pass3::visit_project(&mut project);
-    visitor::pass4::visit_project(&mut project);
+    visitor::pass4::visit_project(&mut project, options.no_fold);
     visitor::unsafe_locals::visit_project(
         &project,
         &mut stage_diagnostics,

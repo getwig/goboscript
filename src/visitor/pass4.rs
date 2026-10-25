@@ -66,7 +66,17 @@ impl Scope<'_> {
     }
 }
 
-pub fn visit_project(project: &mut Project) {
+/// Mark every procedure/function reachable from an event as used; unused ones are dropped by
+/// codegen. With `keep_unused` (`--no-fold`) every procedure/function is a root, so nothing is
+/// dropped (GBS-023).
+pub fn visit_project(project: &mut Project, keep_unused: bool) {
+    if keep_unused {
+        mark_all_used(&mut project.stage, None);
+        let stage = &mut project.stage;
+        for sprite in project.sprites.values_mut() {
+            mark_all_used(sprite, Some(stage));
+        }
+    }
     // first, visit the stage
     for event in &project.stage.events {
         resolve_references(
@@ -307,4 +317,39 @@ fn resolve_references(
             }
         }
     }
+}
+
+fn mark_all_used(sprite: &mut Sprite, mut stage: Option<&mut Sprite>) {
+    let procs: Vec<SmolStr> = sprite.procs.keys().cloned().collect();
+    let funcs: Vec<SmolStr> = sprite.funcs.keys().cloned().collect();
+    let roots = References {
+        procs: procs.into_iter().collect(),
+        funcs: funcs.into_iter().collect(),
+        ..Default::default()
+    };
+    let (global_vars, global_lists) = match stage.as_mut() {
+        Some(stage) => (Some(&mut stage.vars), Some(&mut stage.lists)),
+        None => (None, None),
+    };
+    resolve_references(
+        &mut Scope {
+            used_procs: &mut sprite.used_procs,
+            used_funcs: &mut sprite.used_funcs,
+            proc_args: &mut sprite.proc_args,
+            func_args: &mut sprite.func_args,
+            vars: &mut sprite.vars,
+            proc_locals: &mut sprite.proc_locals,
+            func_locals: &mut sprite.func_locals,
+            lists: &mut sprite.lists,
+            structs: &mut sprite.structs,
+            enums: &mut sprite.enums,
+            global_vars,
+            global_lists,
+        },
+        &sprite.procs,
+        &sprite.proc_references,
+        &sprite.funcs,
+        &sprite.func_references,
+        &roots,
+    );
 }

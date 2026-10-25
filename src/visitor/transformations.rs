@@ -209,6 +209,27 @@ pub fn un_op(expr: &Expr) -> Option<Expr> {
     Some(result.to_expr(span.clone()))
 }
 
+/// A minus applied to a number literal is a negative number literal (`-0.0` stays negative
+/// zero). Used instead of `un_op` when constant folding is off.
+pub fn negative_literal(expr: &Expr) -> Option<Expr> {
+    let Expr::UnOp {
+        op: UnOp::Minus,
+        span,
+        opr,
+    } = expr
+    else {
+        return None;
+    };
+    let Expr::Value {
+        value: Value::Number(number),
+        ..
+    } = opr.as_ref()
+    else {
+        return None;
+    };
+    Some(Value::from(-*number).to_expr(span.clone()))
+}
+
 pub fn minus(expr: &Expr) -> Option<Expr> {
     let Expr::UnOp {
         op: UnOp::Minus,
@@ -233,7 +254,7 @@ pub fn minus(expr: &Expr) -> Option<Expr> {
     ))
 }
 
-pub fn less_than_equal(expr: &Expr) -> Option<Expr> {
+pub fn less_than_equal(expr: &Expr, fold: bool) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Le,
         span,
@@ -245,11 +266,13 @@ pub fn less_than_equal(expr: &Expr) -> Option<Expr> {
     };
     let mut inner = BinOp::Gt.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
     // fold the new comparison, so constant operands fold through the rewrite
-    apply(&mut inner, bin_op);
+    if fold {
+        apply(&mut inner, bin_op);
+    }
     Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 
-pub fn greater_than_equal(expr: &Expr) -> Option<Expr> {
+pub fn greater_than_equal(expr: &Expr, fold: bool) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Ge,
         span,
@@ -261,11 +284,13 @@ pub fn greater_than_equal(expr: &Expr) -> Option<Expr> {
     };
     let mut inner = BinOp::Lt.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
     // fold the new comparison, so constant operands fold through the rewrite
-    apply(&mut inner, bin_op);
+    if fold {
+        apply(&mut inner, bin_op);
+    }
     Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 
-pub fn not_equal(expr: &Expr) -> Option<Expr> {
+pub fn not_equal(expr: &Expr, fold: bool) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Ne,
         span,
@@ -277,7 +302,9 @@ pub fn not_equal(expr: &Expr) -> Option<Expr> {
     };
     let mut inner = BinOp::Eq.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
     // fold the new comparison, so constant operands fold through the rewrite
-    apply(&mut inner, bin_op);
+    if fold {
+        apply(&mut inner, bin_op);
+    }
     Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 

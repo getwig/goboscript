@@ -65,6 +65,10 @@ pub enum Command {
         /// editing one script does not renumber the blocks of other scripts.
         #[arg(long)]
         stable_ids: bool,
+        /// Turn off constant folding, algebraic simplifications and dead-code removal: every
+        /// operator is emitted as a block and unused procedures/functions are kept.
+        #[arg(long)]
+        no_fold: bool,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a

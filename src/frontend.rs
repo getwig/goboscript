@@ -33,6 +33,7 @@ pub fn frontend() -> ExitCode {
             no_turbowarp_config,
             debug_info,
             stable_ids,
+            no_fold,
         } => match build::build(
             input,
             output,
@@ -44,6 +45,7 @@ pub fn frontend() -> ExitCode {
                 no_turbowarp_config,
                 debug_info,
                 stable_ids,
+                no_fold,
             },
         ) {
             Ok(artifact) => {

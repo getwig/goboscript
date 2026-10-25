@@ -36,6 +36,8 @@ pub struct S<'a> {
     pub global_lists: Option<&'a FxHashMap<SmolStr, List>>,
     pub global_enums: Option<&'a FxHashMap<SmolStr, Enum>>,
     pub global_structs: Option<&'a FxHashMap<SmolStr, Struct>>,
+    /// Constant folding and algebraic simplification are enabled (off with `--no-fold`).
+    pub fold: bool,
 }
 
 impl S<'_> {
@@ -71,22 +73,29 @@ impl S<'_> {
     }
 }
 
+/// `fold`: apply constant folding and the algebraic simplifications of `transformations`
+/// (upstream behaviour). With `fold == false` (`--no-fold`) only lowerings that define the
+/// language are applied (`a <= b` -> `not (a > b)`, `-x` -> `0 - x`, `a // b` -> `floor(a / b)`,
+/// boolean literals in arithmetic -> 1/0, negative number literals); every operator written in
+/// the source becomes a block that Scratch evaluates at runtime.
 pub fn visit_project(
     project: &mut Project,
     stage_diagnostics: &mut SpriteDiagnostics,
     sprites_diagnostics: &mut FxHashMap<SmolStr, SpriteDiagnostics>,
+    fold: bool,
 ) {
-    visit_sprite(&mut project.stage, None, stage_diagnostics);
+    visit_sprite(&mut project.stage, None, stage_diagnostics, fold);
     for (sprite_name, sprite) in &mut project.sprites {
         visit_sprite(
             sprite,
             Some(&project.stage),
             sprites_diagnostics.get_mut(sprite_name).unwrap(),
+            fold,
         );
     }
 }
 
-fn visit_sprite(sprite: &mut Sprite, stage: Option<&Sprite>, d: D) {
+fn visit_sprite(sprite: &mut Sprite, stage: Option<&Sprite>, d: D, fold: bool) {
     for proc in sprite.procs.values() {
         let proc_definition = sprite.proc_definitions.get_mut(&proc.name).unwrap();
         visit_stmts(
@@ -106,6 +115,7 @@ fn visit_sprite(sprite: &mut Sprite, stage: Option<&Sprite>, d: D) {
                 global_lists: stage.map(|stage| &stage.lists),
                 global_enums: stage.map(|stage| &stage.enums),
                 global_structs: stage.map(|stage| &stage.structs),
+                fold,
             },
             d,
             true,
@@ -130,6 +140,7 @@ fn visit_sprite(sprite: &mut Sprite, stage: Option<&Sprite>, d: D) {
                 global_lists: stage.map(|stage| &stage.lists),
                 global_enums: stage.map(|stage| &stage.enums),
                 global_structs: stage.map(|stage| &stage.structs),
+                fold,
             },
             d,
             true,
@@ -150,6 +161,7 @@ fn visit_sprite(sprite: &mut Sprite, stage: Option<&Sprite>, d: D) {
         global_lists: stage.map(|stage| &stage.lists),
         global_enums: stage.map(|stage| &stage.enums),
         global_structs: stage.map(|stage| &stage.structs),
+        fold,
     };
     for event in &mut sprite.events {
         visit_stmts(&mut event.body, s, d, true);
@@ -399,23 +411,28 @@ fn visit_expr(expr: &mut Expr, s: S, d: D) {
     }
     transformations::apply(expr, |expr| transformations::enum_field_access(expr, s, d));
     transformations::apply(expr, transformations::minus);
-    transformations::apply(expr, transformations::less_than_equal);
-    transformations::apply(expr, transformations::greater_than_equal);
-    transformations::apply(expr, transformations::not_equal);
+    transformations::apply(expr, |expr| transformations::less_than_equal(expr, s.fold));
+    transformations::apply(expr, |expr| transformations::greater_than_equal(expr, s.fold));
+    transformations::apply(expr, |expr| transformations::not_equal(expr, s.fold));
     transformations::apply(expr, transformations::floor_div);
     transformations::apply(expr, transformations::boolean_arithmetic_operand);
-    transformations::apply(expr, transformations::add_zero_left);
-    transformations::apply(expr, transformations::add_zero_right);
-    transformations::apply(expr, transformations::sub_zero);
-    transformations::apply(expr, transformations::mul_one_left);
-    transformations::apply(expr, transformations::mul_one_right);
-    transformations::apply(expr, transformations::div_one);
-    transformations::apply(expr, transformations::mul_zero_left);
-    transformations::apply(expr, transformations::mul_zero_right);
-    transformations::apply(expr, transformations::join_empty_left);
-    transformations::apply(expr, transformations::join_empty_right);
-    transformations::apply(expr, transformations::bin_op);
-    transformations::apply(expr, transformations::un_op);
+    if s.fold {
+        transformations::apply(expr, transformations::add_zero_left);
+        transformations::apply(expr, transformations::add_zero_right);
+        transformations::apply(expr, transformations::sub_zero);
+        transformations::apply(expr, transformations::mul_one_left);
+        transformations::apply(expr, transformations::mul_one_right);
+        transformations::apply(expr, transformations::div_one);
+        transformations::apply(expr, transformations::mul_zero_left);
+        transformations::apply(expr, transformations::mul_zero_right);
+        transformations::apply(expr, transformations::join_empty_left);
+        transformations::apply(expr, transformations::join_empty_right);
+        transformations::apply(expr, transformations::bin_op);
+        transformations::apply(expr, transformations::un_op);
+    } else {
+        // `-5` is a negative number literal, not an operation (keeps `-0.0` as negative zero).
+        transformations::apply(expr, transformations::negative_literal);
+    }
     transformations::apply(expr, |expr| transformations::variable_field_access(expr, s));
     transformations::apply(expr, |expr| transformations::arg_field_access(expr, s));
     transformations::apply(expr, |expr| transformations::list_field_access(expr, s));
