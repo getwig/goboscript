@@ -337,6 +337,44 @@ pub fn boolean_arithmetic_operand(expr: &Expr) -> Option<Expr> {
     }
 }
 
+// Scratch's arithmetic operators cast their operands (`"007" + 0` is 7, `"" + 0` is 0,
+// `(0/0) + 0` is 0, `-0 + 0` is 0, `Infinity * 0` is NaN) and `join` casts to text, so
+// `x + 0`, `x * 1`, `x * 0`, `"" & x`, ... may only be simplified when the other operand
+// already has the result's type and value. These predicates are deliberately conservative.
+
+/// Reporters that always return a number that is not NaN.
+fn is_non_nan_number(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::UnOp {
+            op: UnOp::Round | UnOp::Abs | UnOp::Floor | UnOp::Ceil | UnOp::Length,
+            ..
+        }
+    )
+}
+
+/// Reporters that always return a finite number that is neither NaN nor negative zero.
+fn is_finite_unsigned_number(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::UnOp {
+            op: UnOp::Length,
+            ..
+        }
+    )
+}
+
+/// Reporters that always return text.
+fn is_text(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::BinOp {
+            op: BinOp::Join,
+            ..
+        }
+    )
+}
+
 pub fn add_zero_left(expr: &Expr) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Add,
@@ -354,6 +392,9 @@ pub fn add_zero_left(expr: &Expr) -> Option<Expr> {
         return None;
     };
     if *n != 0.0 {
+        return None;
+    }
+    if !is_finite_unsigned_number(rhs) {
         return None;
     }
     Some(rhs.as_ref().clone())
@@ -378,6 +419,9 @@ pub fn add_zero_right(expr: &Expr) -> Option<Expr> {
     if *n != 0.0 {
         return None;
     }
+    if !is_finite_unsigned_number(lhs) {
+        return None;
+    }
     Some(lhs.as_ref().clone())
 }
 
@@ -397,7 +441,10 @@ pub fn sub_zero(expr: &Expr) -> Option<Expr> {
     let Value::Number(n) = value else {
         return None;
     };
-    if *n != 0.0 {
+    if *n != 0.0 || n.is_sign_negative() {
+        return None;
+    }
+    if !is_non_nan_number(lhs) {
         return None;
     }
     Some(lhs.as_ref().clone())
@@ -422,6 +469,9 @@ pub fn mul_one_left(expr: &Expr) -> Option<Expr> {
     if *n != 1.0 {
         return None;
     }
+    if !is_non_nan_number(rhs) {
+        return None;
+    }
     Some(rhs.as_ref().clone())
 }
 
@@ -442,6 +492,9 @@ pub fn mul_one_right(expr: &Expr) -> Option<Expr> {
         return None;
     };
     if *n != 1.0 {
+        return None;
+    }
+    if !is_non_nan_number(lhs) {
         return None;
     }
     Some(lhs.as_ref().clone())
@@ -466,6 +519,9 @@ pub fn div_one(expr: &Expr) -> Option<Expr> {
     if *n != 1.0 {
         return None;
     }
+    if !is_non_nan_number(lhs) {
+        return None;
+    }
     Some(lhs.as_ref().clone())
 }
 
@@ -473,6 +529,7 @@ pub fn mul_zero_left(expr: &Expr) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Mul,
         span,
+        rhs,
         lhs,
         ..
     } = expr
@@ -485,7 +542,10 @@ pub fn mul_zero_left(expr: &Expr) -> Option<Expr> {
     let Value::Number(n) = value else {
         return None;
     };
-    if *n != 0.0 {
+    if *n != 0.0 || n.is_sign_negative() {
+        return None;
+    }
+    if !is_finite_unsigned_number(rhs) {
         return None;
     }
     Some(Value::from(0.0).to_expr(span.clone()))
@@ -495,6 +555,7 @@ pub fn mul_zero_right(expr: &Expr) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Mul,
         span,
+        lhs,
         rhs,
         ..
     } = expr
@@ -507,7 +568,10 @@ pub fn mul_zero_right(expr: &Expr) -> Option<Expr> {
     let Value::Number(n) = value else {
         return None;
     };
-    if *n != 0.0 {
+    if *n != 0.0 || n.is_sign_negative() {
+        return None;
+    }
+    if !is_finite_unsigned_number(lhs) {
         return None;
     }
     Some(Value::from(0.0).to_expr(span.clone()))
@@ -536,6 +600,9 @@ pub fn join_empty_left(expr: &Expr) -> Option<Expr> {
         return None;
     }
 
+    if !is_text(rhs) {
+        return None;
+    }
     Some(rhs.as_ref().clone())
 }
 
@@ -562,6 +629,9 @@ pub fn join_empty_right(expr: &Expr) -> Option<Expr> {
         return None;
     }
 
+    if !is_text(lhs) {
+        return None;
+    }
     Some(lhs.as_ref().clone())
 }
 
