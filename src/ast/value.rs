@@ -80,15 +80,7 @@ impl Value {
         match self {
             Value::Boolean(true) => arcstr::literal!("true"),
             Value::Boolean(false) => arcstr::literal!("false"),
-            Value::Number(number) if number.is_nan() => arcstr::literal!("NaN"),
-            Value::Number(number) if number.is_infinite() && number.is_sign_positive() => {
-                arcstr::literal!("Infinity")
-            }
-            Value::Number(number) if number.is_infinite() && number.is_sign_negative() => {
-                arcstr::literal!("-Infinity")
-            }
-            Value::Number(number) if number.fract() == 0.0 => (*number as i64).to_string().into(),
-            Value::Number(number) => serde_json::to_string(number).unwrap().into(),
+            Value::Number(number) => js::number_to_string(*number).into(),
             Value::String(string) => string.clone(),
         }
     }
@@ -194,12 +186,24 @@ pub enum ListIndex {
     All,
 }
 
+/// Largest magnitude below which every integer is exactly representable as an `f64` (2^53).
+pub const MAX_SAFE_INTEGER: f64 = 9007199254740992.0;
+
+/// Whether `number` can be written as a JSON integer without changing its value: integral,
+/// at most 2^53 in magnitude and not negative zero. Larger integral numbers must not go through
+/// `i64` (which saturates at 2^63 - 1).
+pub fn is_safe_integer(number: f64) -> bool {
+    number.fract() == 0.0
+        && number.abs() <= MAX_SAFE_INTEGER
+        && !(number == 0.0 && number.is_sign_negative())
+}
+
 impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where S: serde::Serializer {
         match self {
             Value::Boolean(boolean) => serializer.serialize_bool(*boolean),
-            Value::Number(number) if number.fract() == 0.0 => {
+            Value::Number(number) if is_safe_integer(*number) => {
                 serializer.serialize_i64(*number as i64)
             }
             Value::Number(number) => serializer.serialize_f64(*number),

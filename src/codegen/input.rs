@@ -19,6 +19,7 @@ use super::{
 };
 use crate::{
     ast::{
+        is_safe_integer,
         Expr,
         Name,
         Value,
@@ -140,7 +141,7 @@ impl Sb3 {
                     write!(self.json, "[1,[4,\"NaN\"]]")
                 }
             },
-            Value::Number(number) if number.fract() == 0.0 => {
+            Value::Number(number) if is_safe_integer(*number) => {
                 write!(self.json, "[1,[4,{}]]", json!(*number as i64))
             }
             Value::Number(number) => {
