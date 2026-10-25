@@ -115,41 +115,37 @@ fn visit_stmt(stmt: &mut Stmt, s: &mut S) -> Vec<Stmt> {
             body.extend(cond_callsites);
         }
         Stmt::SetVar {
-            name: _,
+            name,
             value,
             type_: _,
             is_local: _,
             is_cloud: _,
         } => {
             visit_expr(value, &mut before, s);
+            hoist_struct_self_references(name, value, None, &mut before, s);
         }
         Stmt::ChangeVar { name: _, value } => {
             visit_expr(value, &mut before, s);
         }
         Stmt::Show(_name) => {}
         Stmt::Hide(_name) => {}
-        Stmt::AddToList { name: _, value } => {
+        Stmt::AddToList { name, value } => {
             visit_expr(value, &mut before, s);
+            hoist_struct_self_references(name, value, None, &mut before, s);
         }
         Stmt::DeleteList(_name) => {}
         Stmt::DeleteListIndex { name: _, index } => {
             visit_expr(index, &mut before, s);
         }
-        Stmt::InsertAtList {
-            name: _,
-            index,
-            value,
-        } => {
+        Stmt::InsertAtList { name, index, value } => {
             visit_expr(index, &mut before, s);
             visit_expr(value, &mut before, s);
+            hoist_struct_self_references(name, value, Some(index), &mut before, s);
         }
-        Stmt::SetListIndex {
-            name: _,
-            index,
-            value,
-        } => {
+        Stmt::SetListIndex { name, index, value } => {
             visit_expr(index, &mut before, s);
             visit_expr(value, &mut before, s);
+            hoist_struct_self_references(name, value, Some(index), &mut before, s);
         }
         Stmt::Block {
             block: _,
@@ -329,5 +325,94 @@ fn visit_expr(expr: &mut Expr, before: &mut Vec<Stmt>, s: &mut S) {
     };
     if let Some(replace) = replace {
         *expr = replace;
+    }
+}
+
+/// A struct assignment from a struct literal (`a = P { x: a.y, y: a.x };`, also for struct list
+/// items) is lowered to one assignment per field, in field order. Each field value that reads
+/// the assigned variable or list (and a list index that does) would then see fields that were
+/// already overwritten. Evaluate those values into temporaries first, so the assignment is
+/// atomic (GBS-003).
+fn hoist_struct_self_references(
+    target: &Name,
+    value: &mut Expr,
+    index: Option<&mut Expr>,
+    before: &mut Vec<Stmt>,
+    s: &mut S,
+) {
+    if target.fieldname().is_some() {
+        return;
+    }
+    let Expr::StructLiteral { fields, .. } = value else {
+        return;
+    };
+    if fields.len() < 2 {
+        return;
+    }
+    let basename = target.basename().clone();
+    let hoist = |expr: &mut Expr, before: &mut Vec<Stmt>, s: &mut S| {
+        if !mentions(expr, &basename) {
+            return;
+        }
+        *s.callsites += 1;
+        let span = expr.span();
+        let temp = Name::Name {
+            name: format!("@{}", *s.callsites).into(),
+            span: span.clone(),
+        };
+        s.vars.insert(
+            temp.basename().clone(),
+            Var {
+                name: temp.basename().clone(),
+                span: span.clone(),
+                type_: Type::Value,
+                default: None,
+                is_cloud: false,
+                is_used: true,
+            },
+        );
+        before.push(Stmt::SetVar {
+            name: temp.clone(),
+            value: Box::new(expr.clone()),
+            type_: Type::Value,
+            is_local: false,
+            is_cloud: false,
+        });
+        *expr = Expr::Name(temp);
+    };
+    for field in fields.iter_mut() {
+        hoist(&mut field.value, before, s);
+    }
+    if let Some(index) = index {
+        hoist(index, before, s);
+    }
+}
+
+/// Whether `expr` reads the variable or list called `basename` (or one of its fields).
+fn mentions(expr: &Expr, basename: &SmolStr) -> bool {
+    match expr {
+        Expr::Value { .. } | Expr::Arg(_) => false,
+        Expr::Name(name) => name.basename() == basename,
+        Expr::Dot { lhs, .. } => mentions(lhs, basename),
+        Expr::Repr { args, .. } => args.iter().any(|arg| mentions(arg, basename)),
+        Expr::FuncCall { args, kwargs, .. } => {
+            args.iter().any(|arg| mentions(arg, basename))
+                || kwargs.values().any(|(_, arg)| mentions(arg, basename))
+        }
+        Expr::UnOp { opr, .. } => mentions(opr, basename),
+        Expr::BinOp { lhs, rhs, .. } => mentions(lhs, basename) || mentions(rhs, basename),
+        Expr::StructLiteral { fields, .. } => {
+            fields.iter().any(|field| mentions(&field.value, basename))
+        }
+        Expr::Property { object, .. } => mentions(object, basename),
+        Expr::Ternary {
+            condition,
+            tvalue,
+            fvalue,
+        } => {
+            mentions(condition, basename)
+                || mentions(tvalue, basename)
+                || mentions(fvalue, basename)
+        }
     }
 }
