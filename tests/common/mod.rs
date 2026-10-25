@@ -66,16 +66,17 @@ pub fn build_in(
     std_path: PathBuf,
     options: &BuildOptions,
 ) -> Built {
-    let stdlib = StandardLibrary {
+    // with an explicit --std-path, let build_impl resolve the standard library itself
+    let stdlib = options.std_path.is_none().then(|| StandardLibrary {
         version: Version::new(0, 0, 0),
         path: std_path,
-    };
+    });
     let mut sb3 = Vec::new();
     let artifact = build_impl(
         Rc::new(RefCell::new(RealFS)),
         root.canonicalize().unwrap(),
         Cursor::new(&mut sb3),
-        Some(stdlib),
+        stdlib,
         options,
     )
     .expect("build_impl failed");

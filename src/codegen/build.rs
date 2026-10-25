@@ -51,6 +51,9 @@ pub struct BuildOptions {
     /// Report `local` variables in nowarp or recursive procedures as errors instead of
     /// warnings (GBS-029).
     pub deny_unsafe_locals: bool,
+    /// Use the standard library in this directory (`%include std/x` reads `<dir>/x.gs`) instead
+    /// of the per-user cache; nothing is fetched from the network (GBS-024).
+    pub std_path: Option<PathBuf>,
 }
 
 pub fn build_impl<T: Write + Seek>(
@@ -77,6 +80,17 @@ pub fn build_impl<T: Write + Seek>(
     );
     let stdlib = if let Some(stdlib) = stdlib {
         stdlib
+    } else if let Some(std_path) = &options.std_path {
+        anyhow::ensure!(
+            std_path.is_dir(),
+            "standard library directory {} does not exist",
+            std_path.display()
+        );
+        // Version 0.0.0 marks a local standard library: it is never fetched.
+        StandardLibrary {
+            version: semver::Version::new(0, 0, 0),
+            path: std_path.clone(),
+        }
     } else if let Some(std) = &config.std {
         let dirs = ProjectDirs::from("com", "aspizu", "goboscript").unwrap();
         let std = std

@@ -43,6 +43,10 @@ pub enum Command {
         /// warnings (they are shared by all calls of the procedure).
         #[arg(long)]
         deny_unsafe_locals: bool,
+        /// Use the standard library in this directory instead of downloading it
+        /// (`%include std/math` reads `<STD_PATH>/math.gs`). No network access.
+        #[arg(long, env = "GOBOSCRIPT_STD_PATH")]
+        std_path: Option<PathBuf>,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a

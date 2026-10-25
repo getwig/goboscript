@@ -52,7 +52,25 @@ fn fetch_package(version: &Version, path: &Path) -> anyhow::Result<()> {
     if path.exists() {
         return Ok(());
     }
-    fs::create_dir_all(path)?;
+    // Extract into a sibling temporary directory and rename it into place on success, so a
+    // failed download does not leave an empty directory that later builds take as installed.
+    let parent = path.parent().unwrap_or(Path::new("."));
+    fs::create_dir_all(parent)?;
+    let staging = tempfile::Builder::new()
+        .prefix(".std-download-")
+        .tempdir_in(parent)?;
+    extract_package(version, staging.path())?;
+    let staging = staging.keep();
+    if let Err(error) = fs::rename(&staging, path) {
+        let _ = fs::remove_dir_all(&staging);
+        if !path.exists() {
+            return Err(error.into());
+        }
+    }
+    Ok(())
+}
+
+fn extract_package(version: &Version, path: &Path) -> anyhow::Result<()> {
     let client = create_client()?;
     let response = client
         .get(format!(
