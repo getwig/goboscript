@@ -9,9 +9,12 @@ use std::{
 };
 
 use crate::{
-    codegen::build::{
-        build_impl,
-        BuildOptions,
+    codegen::{
+        build::{
+            build_impl,
+            BuildOptions,
+        },
+        source_map::source_map,
     },
     diagnostic::Artifact,
     vfs::RealFS,
@@ -31,9 +34,17 @@ pub fn build(
     // build succeeds, so a failed build never truncates or replaces an existing output (GBS-008).
     // Renaming replaces a symlink at the output path instead of writing through it.
     let mut file = temporary_output(&output)?;
-    let artifact = build_impl(fs, canonical_input, file.as_file_mut(), None, options)?;
+    let artifact = build_impl(fs, canonical_input.clone(), file.as_file_mut(), None, options)?;
     if !artifact.failure() {
         file.persist(&output)?;
+        if let Some(debug_info) = &options.debug_info {
+            let std_path = options
+                .std_path
+                .as_ref()
+                .and_then(|std_path| std_path.canonicalize().ok());
+            let map = source_map(&artifact, &canonical_input, std_path.as_deref(), &mut RealFS);
+            std::fs::write(debug_info, serde_json::to_vec_pretty(&map)?)?;
+        }
     }
     Ok(artifact)
 }

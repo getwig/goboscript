@@ -61,6 +61,8 @@ pub struct BuildOptions {
     pub no_stage_notes: bool,
     /// Do not add the Stage `_twconfig_` comment with TurboWarp settings (GBS-026).
     pub no_turbowarp_config: bool,
+    /// Also write a source map (block id -> `.gs` file:line) to this path (GBS-022).
+    pub debug_info: Option<PathBuf>,
 }
 
 pub fn build_impl<T: Write + Seek>(

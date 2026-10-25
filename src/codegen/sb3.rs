@@ -1022,6 +1022,9 @@ impl Sb3 {
         let this_id = self.id.new_id();
         let prototype_id = self.id.new_id();
         let next_id = self.id.new_id();
+        d.debug_info
+            .blocks
+            .insert(this_id.to_string(), proc.span.clone());
         self.begin_node(
             Node::new("procedures_definition", this_id)
                 .some_next_id((!definition.is_empty()).then_some(next_id))
@@ -1096,6 +1099,9 @@ impl Sb3 {
         let this_id = self.id.new_id();
         let prototype_id = self.id.new_id();
         let next_id = self.id.new_id();
+        d.debug_info
+            .blocks
+            .insert(this_id.to_string(), func.span.clone());
         self.begin_node(
             Node::new("procedures_definition", this_id)
                 .some_next_id((!definition.is_empty()).then_some(next_id))
@@ -1169,6 +1175,9 @@ impl Sb3 {
     pub fn event(&mut self, s: S, d: D, event: &Event) -> io::Result<()> {
         let this_id = self.id.new_id();
         let next_id = self.id.new_id();
+        d.debug_info
+            .blocks
+            .insert(this_id.to_string(), event.span.clone());
         self.begin_node(
             Node::new(event.kind.opcode(), this_id)
                 .some_next_id((!event.body.is_empty()).then_some(next_id))

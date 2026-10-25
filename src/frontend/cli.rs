@@ -57,6 +57,10 @@ pub enum Command {
         /// Do not add the Stage `_twconfig_` comment (TurboWarp settings, ignored by Scratch).
         #[arg(long)]
         no_turbowarp_config: bool,
+        /// Also write a source map to this file: for every target, the `.gs` file, line and
+        /// column of each block id.
+        #[arg(long, value_name = "PATH")]
+        debug_info: Option<PathBuf>,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a
