@@ -127,6 +127,13 @@ pub enum DiagnosticKind {
     UnusedArg(SmolStr),
     UnusedStructField(SmolStr),
     FixedLengthListInvalid(f64),
+    /// A non-trivial argument of a function-like macro whose parameter is used more than once,
+    /// so it is evaluated (with its side effects) more than once (GBS-005).
+    MacroArgumentEvaluatedMultipleTimes {
+        macro_name: SmolStr,
+        param: SmolStr,
+        uses: usize,
+    },
     /// A `local` variable that is shared by overlapping calls (GBS-029). Warning, or error when
     /// `deny` is set (`--deny-unsafe-locals`).
     UnsafeLocal {
@@ -315,6 +322,13 @@ impl DiagnosticKind {
                 format!("duplicate variant {variant_name} in enum {enum_name}")
             }
             DiagnosticKind::EmptyStruct(name) => format!("struct {name} is empty"),
+            DiagnosticKind::MacroArgumentEvaluatedMultipleTimes {
+                macro_name,
+                param,
+                uses,
+            } => format!(
+                "argument {param} of macro {macro_name} is evaluated {uses} times"
+            ),
             DiagnosticKind::UnsafeLocal {
                 name,
                 procedure,
@@ -348,6 +362,11 @@ impl DiagnosticKind {
 
     pub fn help(&self, sprite: &Sprite) -> Option<String> {
         match self {
+            DiagnosticKind::MacroArgumentEvaluatedMultipleTimes { .. } => Some(
+                "macros substitute their arguments textually; store the argument in a variable \
+                 first if it has side effects or is expensive"
+                    .to_string(),
+            ),
             DiagnosticKind::UnsafeLocal { .. } => Some(
                 "locals are one variable per procedure, not per call; another call that runs \
                  while this one is active overwrites the value. Use a list as a stack, or \
@@ -543,6 +562,7 @@ impl From<&DiagnosticKind> for Level {
             | DiagnosticKind::FollowedByUnreachableCode
             | DiagnosticKind::InvalidCostumeName(_)
             | DiagnosticKind::InvalidBackdropName(_)
+            | DiagnosticKind::MacroArgumentEvaluatedMultipleTimes { .. }
             | DiagnosticKind::UnrecognizedKey(_)
             | DiagnosticKind::UnusedVariable(_)
             | DiagnosticKind::UnusedList(_)

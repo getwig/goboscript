@@ -45,10 +45,10 @@ fn tokenize(translation_unit: &TranslationUnit) -> (Vec<SpannedToken>, Vec<Diagn
 }
 
 /// Apply preprocessing to the tokens
-fn preprocess(mut tokens: Vec<SpannedToken>) -> (Vec<SpannedToken>, Option<Diagnostic>) {
-    match PreProcessor::apply(&mut tokens) {
-        Ok(()) => (tokens, None),
-        Err(diagnostic) => (tokens, Some(diagnostic)),
+fn preprocess(mut tokens: Vec<SpannedToken>) -> (Vec<SpannedToken>, Vec<Diagnostic>) {
+    match PreProcessor::apply_with_warnings(&mut tokens) {
+        Ok(warnings) => (tokens, warnings),
+        Err(diagnostic) => (tokens, vec![diagnostic]),
     }
 }
 
@@ -75,12 +75,12 @@ fn parse_sprite(tokens: Vec<SpannedToken>) -> (Sprite, Vec<Diagnostic>) {
 /// Returns the parsed sprite and any diagnostics encountered during parsing.
 pub fn parse(translation_unit: &TranslationUnit) -> (Sprite, Vec<Diagnostic>) {
     let (tokens, tokenize_diagnostics) = tokenize(translation_unit);
-    let (tokens, preprocess_diagnostic) = preprocess(tokens);
+    let (tokens, preprocess_diagnostics) = preprocess(tokens);
     let (sprite, parse_diagnostics) = parse_sprite(tokens);
 
     let all_diagnostics = tokenize_diagnostics
         .into_iter()
-        .chain(preprocess_diagnostic)
+        .chain(preprocess_diagnostics)
         .chain(parse_diagnostics)
         .collect();
 

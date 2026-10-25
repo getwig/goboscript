@@ -127,10 +127,17 @@ pub fn build_impl<T: Write + Seek>(
         sprites.insert(sprite_name, sprite);
     }
     let mut project = Project { stage, sprites };
-    if !(stage_diagnostics.diagnostics.is_empty()
-        && sprites_diagnostics
+    // Stop after parsing on errors; parse warnings (e.g. from macro expansion) do not stop.
+    let is_error = |diagnostic: &crate::diagnostic::Diagnostic| {
+        matches!(
+            annotate_snippets::Level::from(&diagnostic.kind),
+            annotate_snippets::Level::Error
+        )
+    };
+    if stage_diagnostics.diagnostics.iter().any(is_error)
+        || sprites_diagnostics
             .values()
-            .all(|sprite_diagnostics| sprite_diagnostics.diagnostics.is_empty()))
+            .any(|sprite_diagnostics| sprite_diagnostics.diagnostics.iter().any(is_error))
     {
         return Ok(Artifact {
             project,

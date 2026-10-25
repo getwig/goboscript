@@ -29,10 +29,44 @@ pub struct PreProcessor<'a, 'b> {
     function_defines: FunctionDefines,
     simple_defines: FxHashMap<SmolStr, Vec<Token>>,
     i: &'b mut usize,
+    warnings: Vec<Diagnostic>,
+}
+
+/// Whether a macro argument is cheap and free of side effects, so that evaluating it more than
+/// once is harmless: an optionally negated literal, or a variable/argument with field accesses.
+fn is_trivial_macro_argument(tokens: &[Token]) -> bool {
+    let tokens = match tokens {
+        [Token::Minus, rest @ ..] => rest,
+        tokens => tokens,
+    };
+    match tokens {
+        [Token::Int(_)
+        | Token::Float(_)
+        | Token::Hex(_)
+        | Token::Oct(_)
+        | Token::Bin(_)
+        | Token::Str(_)
+        | Token::True
+        | Token::False] => true,
+        [Token::Name(_) | Token::Arg(_), rest @ ..] => {
+            rest.len() % 2 == 0
+                && rest
+                    .chunks(2)
+                    .all(|pair| matches!(pair, [Token::Dot, Token::Name(_)]))
+        }
+        _ => false,
+    }
 }
 
 impl<'a> PreProcessor<'a, '_> {
     pub fn apply(tokens: &'a mut Vec<SpannedToken>) -> Result<(), Diagnostic> {
+        Self::apply_with_warnings(tokens).map(|_| ())
+    }
+
+    /// Like `apply`, and returns the warnings found while expanding macros.
+    pub fn apply_with_warnings(
+        tokens: &'a mut Vec<SpannedToken>,
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
         let length = tokens.len();
         let mut i = 0;
         let mut pre_processor = PreProcessor {
@@ -40,10 +74,11 @@ impl<'a> PreProcessor<'a, '_> {
             i: &mut i,
             function_defines: Default::default(),
             simple_defines: Default::default(),
+            warnings: vec![],
         };
         pre_processor.process(&mut (0..length), &Default::default())?;
         pre_processor.remove_marker_tokens();
-        Ok(())
+        Ok(pre_processor.warnings)
     }
 
     fn process(
@@ -273,6 +308,25 @@ impl<'a> PreProcessor<'a, '_> {
             });
         };
 
+        // Macros are textual: an argument is evaluated once per use of its parameter. Warn when
+        // that repeats side effects or work (GBS-005).
+        for (param, arg) in function_define_params.iter().zip(&args) {
+            let uses = function_define_body
+                .iter()
+                .filter(|token| *token == param)
+                .count();
+            if uses > 1 && !is_trivial_macro_argument(arg) {
+                self.warnings.push(Diagnostic {
+                    kind: DiagnosticKind::MacroArgumentEvaluatedMultipleTimes {
+                        macro_name: macro_name.clone(),
+                        param: param.to_string().into(),
+                        uses,
+                    },
+                    span: macro_name_span.clone(),
+                });
+            }
+        }
+
         // Expand used arguments before suppressing this macro in its replacement body.
         for (param, arg) in function_define_params.iter().zip(&mut args) {
             if function_define_body.contains(param) {
@@ -467,10 +521,13 @@ impl<'a> PreProcessor<'a, '_> {
                 i: &mut i,
                 function_defines: self.function_defines.clone(),
                 simple_defines: self.simple_defines.clone(),
+                warnings: vec![],
             };
 
             pre_processor.process(&mut (0..length), suppress)?;
             pre_processor.remove_marker_tokens();
+            let warnings = std::mem::take(&mut pre_processor.warnings);
+            self.warnings.extend(warnings);
         }
 
         Ok(spanned.into_iter().map(|(_, token, _)| token).collect())
@@ -669,6 +726,23 @@ mod tests {
         let tokens = preprocess("%define foobar 1\n%define C(x) CONCAT(x, bar)\nC(foo)\n").unwrap();
 
         assert_eq!(tokens, vec![Token::Int(1.0)]);
+    }
+
+    fn warnings(source: &str) -> Vec<Diagnostic> {
+        let mut tokens: Vec<_> = Lexer::new(source).collect::<Result<_, _>>().unwrap();
+        PreProcessor::apply_with_warnings(&mut tokens).unwrap()
+    }
+
+    #[test]
+    fn repeated_non_trivial_macro_argument_warns() {
+        let src = "%define MIN(A, B) ((A) - ((A) - (B)) * ((A) > (B)))\n";
+        assert_eq!(warnings(&format!("{src}x = MIN(bump(), 100);\n")).len(), 1);
+        assert_eq!(warnings(&format!("{src}x = MIN(a + 1, 100);\n")).len(), 1);
+        // literals, variables, arguments and field accesses are fine
+        assert!(warnings(&format!("{src}x = MIN(a, -1);\n")).is_empty());
+        assert!(warnings(&format!("{src}x = MIN($n, p.x);\n")).is_empty());
+        // a parameter used once is fine
+        assert!(warnings("%define ID(A) (A)\nx = ID(bump());\n").is_empty());
     }
 
     #[test]
