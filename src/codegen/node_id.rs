@@ -7,11 +7,11 @@ use std::fmt::{
 
 #[derive(Debug, Copy, Clone)]
 pub struct NodeID {
-    value: usize,
+    value: u64,
 }
 
 impl NodeID {
-    pub fn new(value: usize) -> Self {
+    pub fn new(value: u64) -> Self {
         Self { value }
     }
 }
@@ -26,8 +26,8 @@ impl Display for NodeID {
             f.write_char(CHARSET[0] as char)?;
         } else {
             while n > 0 {
-                f.write_char(CHARSET[n % CHARSET.len()] as char)?;
-                n /= CHARSET.len();
+                f.write_char(CHARSET[(n % CHARSET.len() as u64) as usize] as char)?;
+                n /= CHARSET.len() as u64;
             }
         }
         write!(f, "\"")

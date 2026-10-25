@@ -574,6 +574,7 @@ impl Sb3 {
             costumes.insert(&costume.name);
         }
         self.id.reset();
+        self.id.begin_script(name, "");
         write!(self.json, "{{")?;
         write!(self.json, r#""isStage":{}"#, name == STAGE_NAME)?;
         write!(self.json, r#","name":{}"#, json!(name))?;
@@ -698,6 +699,7 @@ impl Sb3 {
             .filter(|proc| sprite.used_procs.contains(&proc.name))
         {
             let proc_definition = sprite.proc_definitions.get(&proc.name).unwrap();
+            self.id.begin_script(name, &format!("proc {}", proc.name));
             self.proc(
                 S {
                     stage,
@@ -716,6 +718,7 @@ impl Sb3 {
             .filter(|func| sprite.used_funcs.contains(&func.name))
         {
             let func_definition = sprite.func_definitions.get(&func.name).unwrap();
+            self.id.begin_script(name, &format!("func {}", func.name));
             self.func(
                 S {
                     stage,
@@ -728,7 +731,12 @@ impl Sb3 {
                 func_definition,
             )?;
         }
+        let mut event_ordinals: FxHashMap<String, usize> = Default::default();
         for event in &sprite.events {
+            let event_key = event_script_key(&event.kind);
+            let ordinal = event_ordinals.entry(event_key.clone()).or_default();
+            self.id.begin_script(name, &format!("{event_key} #{ordinal}"));
+            *ordinal += 1;
             self.event(
                 S {
                     stage,
@@ -1449,4 +1457,19 @@ fn compute_layers(project: &Project, config: &Config) -> anyhow::Result<FxHashMa
         }
     }
     Ok(layers)
+}
+
+/// Key of an event script for stable block ids: the hat and its menu value, without source
+/// positions. Scripts with the same key are told apart by their order in the target.
+fn event_script_key(kind: &EventKind) -> String {
+    match kind {
+        EventKind::OnFlag => "onflag".into(),
+        EventKind::OnKey { key, .. } => format!("onkey {key}"),
+        EventKind::OnClick => "onclick".into(),
+        EventKind::OnBackdrop { backdrop, .. } => format!("onbackdrop {backdrop}"),
+        EventKind::OnLoudnessGt { .. } => "onloudness".into(),
+        EventKind::OnTimerGt { .. } => "ontimer".into(),
+        EventKind::OnClone => "onclone".into(),
+        EventKind::On { event } => format!("on {event}"),
+    }
 }

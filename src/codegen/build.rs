@@ -63,6 +63,9 @@ pub struct BuildOptions {
     pub no_turbowarp_config: bool,
     /// Also write a source map (block id -> `.gs` file:line) to this path (GBS-022).
     pub debug_info: Option<PathBuf>,
+    /// Derive block ids from the target, the enclosing script and the position in it instead
+    /// of numbering all blocks of a target, so ids survive edits elsewhere (GBS-022).
+    pub stable_ids: bool,
 }
 
 pub fn build_impl<T: Write + Seek>(
@@ -197,6 +200,7 @@ pub fn build_impl<T: Write + Seek>(
     log::info!("{:#?}", project);
     let mut sb3 = Sb3::new(fs.clone(), input.clone());
     sb3.ai_detection = !options.no_ai_detection;
+    sb3.id.stable = options.stable_ids;
     sb3.stage_notes = !options.no_stage_notes;
     sb3.turbowarp_config = !options.no_turbowarp_config;
     sb3.project(

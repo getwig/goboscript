@@ -32,6 +32,7 @@ pub fn frontend() -> ExitCode {
             no_stage_notes,
             no_turbowarp_config,
             debug_info,
+            stable_ids,
         } => match build::build(
             input,
             output,
@@ -42,6 +43,7 @@ pub fn frontend() -> ExitCode {
                 no_stage_notes,
                 no_turbowarp_config,
                 debug_info,
+                stable_ids,
             },
         ) {
             Ok(artifact) => {

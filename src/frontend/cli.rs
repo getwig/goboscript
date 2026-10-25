@@ -61,6 +61,10 @@ pub enum Command {
         /// column of each block id.
         #[arg(long, value_name = "PATH")]
         debug_info: Option<PathBuf>,
+        /// Derive block ids from the target, the enclosing script and the position in it, so
+        /// editing one script does not renumber the blocks of other scripts.
+        #[arg(long)]
+        stable_ids: bool,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a
