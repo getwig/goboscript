@@ -33,10 +33,10 @@ pub enum Token {
     #[regex(r"0o[0-7][_0-7]*", oct)]
     Oct(i64),
     #[regex(r"[0-9][_0-9]*", priority=2, callback=int)]
-    Int(i64),
+    Int(f64),
     #[regex(r"0x[0-9a-fA-F][_0-9a-fA-F]*", hex)]
     Hex(i64),
-    #[regex(r"(0|[1-9][0-9]*)(\.[0-9]+)?([Ee][\-+][0-9]+)?", priority=1, callback=float)]
+    #[regex(r"(0|[1-9][0-9]*)(\.[0-9]+)?([Ee][\-+]?[0-9]+)?", priority=1, callback=float)]
     Float(f64),
     #[regex(r#""([^"\\]|\\["\\/bfnrt]|\\u[0-9a-zA-Z]{4})*""#, string)]
     Str(SmolStr),

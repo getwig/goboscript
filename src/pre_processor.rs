@@ -668,7 +668,7 @@ mod tests {
     fn concat_reprocesses_the_pasted_token() {
         let tokens = preprocess("%define foobar 1\n%define C(x) CONCAT(x, bar)\nC(foo)\n").unwrap();
 
-        assert_eq!(tokens, vec![Token::Int(1)]);
+        assert_eq!(tokens, vec![Token::Int(1.0)]);
     }
 
     #[test]

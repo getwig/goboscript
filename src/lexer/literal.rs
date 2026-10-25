@@ -25,7 +25,9 @@ pub fn oct(lex: &mut Lexer<Token>) -> Option<i64> {
     i64::from_str_radix(&lex.slice()[2..].replace('_', ""), 8).ok()
 }
 
-pub fn int(lex: &mut Lexer<Token>) -> Option<i64> {
+/// Decimal integer literals are parsed as `f64`, like every Scratch number, so literals that do
+/// not fit an `i64` (e.g. `100000000000000000000000`) are valid instead of an invalid token.
+pub fn int(lex: &mut Lexer<Token>) -> Option<f64> {
     lex.slice().replace('_', "").parse().ok()
 }
 

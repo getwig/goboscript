@@ -623,7 +623,7 @@ extern {
         ARG            => Token::Arg(<SmolStr>),
         BIN            => Token::Bin(<i64>),
         OCT            => Token::Oct(<i64>),
-        INT            => Token::Int(<i64>),
+        INT            => Token::Int(<f64>),
         HEX            => Token::Hex(<i64>),
         FLOAT          => Token::Float(<f64>),
         STR            => Token::Str(<SmolStr>),

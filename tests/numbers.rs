@@ -31,3 +31,14 @@ fn join_folding_uses_javascript_number_to_string() {
         assert!(says.contains(&json!(expected)), "{expected} not in {says:?}");
     }
 }
+
+// GBS-007: exponent without sign and integer literals beyond i64 are valid number literals.
+#[test]
+fn exponent_without_sign_and_huge_integers_lex() {
+    let b = build_main("var a = 1e21;\nvar b = 2E3;\nvar c = 100000000000000000000000;\nvar d = 1_000;");
+    assert!(!b.failed(), "{:?}", b.diagnostics());
+    assert_eq!(b.var("main", "a"), json!(1e21));
+    assert_eq!(b.var("main", "b"), json!(2000));
+    assert_eq!(b.var("main", "c"), json!(1e23));
+    assert_eq!(b.var("main", "d"), json!(1000));
+}
