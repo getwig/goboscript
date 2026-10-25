@@ -18,12 +18,17 @@ onflag {
     say 1;
     twice;
     say ANSWER + 1;
+    say f(5);
 }
 ";
 
 const LIB: &str = "proc twice {
     say 2;
     say 3;
+}
+func f(x) {
+    if $x > 1 { return 1; }
+    return 2;
 }
 ";
 
@@ -94,6 +99,8 @@ fn debug_info_maps_blocks_to_source_lines() {
     assert_eq!(location("procedures_definition", None), ("lib/twice.gs".into(), 1));
     assert_eq!(location("looks_say", Some(2)), ("lib/twice.gs".into(), 2));
     assert_eq!(location("looks_say", Some(3)), ("lib/twice.gs".into(), 3));
+    // blocks generated for `return` map to the return statement
+    assert_eq!(location("control_stop", None), ("lib/twice.gs".into(), 6));
     // every non-shadow block has an entry
     for (id, block) in blocks {
         if block["shadow"] == true || block["opcode"] == "procedures_prototype" {

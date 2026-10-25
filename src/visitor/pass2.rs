@@ -642,10 +642,10 @@ where
     Some(struct_literal_fields)
 }
 
-fn visit_stmt_return(_value: &Expr) -> Option<Vec<Stmt>> {
+fn visit_stmt_return(value: &Expr) -> Option<Vec<Stmt>> {
     Some(vec![Stmt::Block {
         block: Block::StopThisScript,
-        span: 0..0,
+        span: value.span(),
         args: vec![],
         kwargs: Default::default(),
     }])

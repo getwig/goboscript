@@ -190,10 +190,12 @@ fn visit_stmt(stmt: &mut Stmt, s: &mut S) -> Vec<Stmt> {
             if !*visited {
                 *visited = true;
                 if let Some(func) = s.func {
+                    // generated statements keep the location of the `return` value
+                    let span = value.span();
                     before.push(Stmt::SetVar {
                         name: Name::Name {
                             name: format!("{}:return", func.name).into(),
-                            span: 0..0,
+                            span: span.clone(),
                         },
                         value: value.clone(),
                         type_: Type::Value,
@@ -203,7 +205,7 @@ fn visit_stmt(stmt: &mut Stmt, s: &mut S) -> Vec<Stmt> {
                     replace = Some(Stmt::Return {
                         value: Expr::Value {
                             value: Value::from(0.0),
-                            span: 0..0,
+                            span,
                         }
                         .into(),
                         visited: true,
