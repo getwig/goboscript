@@ -1,14 +1,6 @@
 use std::{
     cell::RefCell,
     env,
-    fs::{
-        File,
-        OpenOptions,
-    },
-    io::{
-        self,
-        BufWriter,
-    },
     path::{
         Path,
         PathBuf,
@@ -35,43 +27,28 @@ pub fn build(
     let project_name = canonical_input.file_name().unwrap().to_str().unwrap();
     let output = output.unwrap_or_else(|| input.join(format!("{project_name}.sb3")));
     let fs = Rc::new(RefCell::new(RealFS));
-    let file = BufWriter::new(open_output(&output)?);
-    build_impl(fs, canonical_input, file, None, options)
+    // Write into a temporary file next to the output and move it into place only when the
+    // build succeeds, so a failed build never truncates or replaces an existing output (GBS-008).
+    // Renaming replaces a symlink at the output path instead of writing through it.
+    let mut file = temporary_output(&output)?;
+    let artifact = build_impl(fs, canonical_input, file.as_file_mut(), None, options)?;
+    if !artifact.failure() {
+        file.persist(&output)?;
+    }
+    Ok(artifact)
 }
 
-fn open_output(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true);
+fn temporary_output(output: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    let dir = match output.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".goboscript-").suffix(".sb3.tmp");
     #[cfg(unix)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW);
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o644));
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-
-        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
-        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    #[cfg(not(any(unix, windows)))]
-    return Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "opening output without following symlinks is unsupported",
-    ));
-
-    let file = options.open(path)?;
-    // Inspect and truncate the same handle; never check the path before opening it.
-    let metadata = file.metadata()?;
-    #[cfg(windows)]
-    if metadata.file_type().is_symlink() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "output path is a symlink",
-        ));
-    }
-    if metadata.is_file() {
-        file.set_len(0)?;
-    }
-    Ok(file)
+    builder.tempfile_in(dir)
 }
