@@ -31,13 +31,32 @@ pub fn build(
     let project_name = canonical_input.file_name().unwrap().to_str().unwrap();
     let output = output.unwrap_or_else(|| input.join(format!("{project_name}.sb3")));
     let fs = Rc::new(RefCell::new(RealFS));
-    // Write into a temporary file next to the output and move it into place only when the
-    // build succeeds, so a failed build never truncates or replaces an existing output (GBS-008).
-    // Renaming replaces a symlink at the output path instead of writing through it.
-    let mut file = temporary_output(&output)?;
-    let artifact = build_impl(fs, canonical_input.clone(), file.as_file_mut(), None, options)?;
+    // A missing output or a regular file: write a temporary file next to it and move it into
+    // place only when the build succeeds, so a failed build never truncates or replaces an
+    // existing output (GBS-008). Anything else (a device such as /dev/null, a FIFO) is written
+    // directly after a successful build and never replaced (GBS-036); a symbolic link is refused,
+    // as upstream does (it opens the output with O_NOFOLLOW).
+    let kind = output_kind(&output)?;
+    let mut temporary = None;
+    let mut memory = std::io::Cursor::new(Vec::new());
+    let artifact = if kind == OutputKind::Replaceable {
+        let mut file = temporary_output(&output)?;
+        let artifact = build_impl(fs, canonical_input.clone(), file.as_file_mut(), None, options)?;
+        temporary = Some(file);
+        artifact
+    } else {
+        build_impl(fs, canonical_input.clone(), &mut memory, None, options)?
+    };
     if !artifact.failure() {
-        file.persist(&output)?;
+        match temporary {
+            Some(file) => {
+                file.persist(&output)?;
+            }
+            None => {
+                let mut out = std::fs::OpenOptions::new().write(true).open(&output)?;
+                std::io::Write::write_all(&mut out, memory.get_ref())?;
+            }
+        }
         if let Some(debug_info) = &options.debug_info {
             let std_path = options
                 .std_path
@@ -56,6 +75,30 @@ pub fn build(
         }
     }
     Ok(artifact)
+}
+
+#[derive(PartialEq, Eq)]
+enum OutputKind {
+    /// Missing or a regular file: written via a temporary file and a rename.
+    Replaceable,
+    /// A device, FIFO or socket: written in place.
+    Special,
+}
+
+fn output_kind(output: &Path) -> anyhow::Result<OutputKind> {
+    match std::fs::symlink_metadata(output) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(OutputKind::Replaceable),
+        Err(error) => Err(error.into()),
+        Ok(metadata) if metadata.file_type().is_symlink() => anyhow::bail!(
+            "output {} is a symbolic link; refusing to write through or replace it",
+            output.display()
+        ),
+        Ok(metadata) if metadata.is_file() => Ok(OutputKind::Replaceable),
+        Ok(metadata) if metadata.is_dir() => {
+            anyhow::bail!("output {} is a directory", output.display())
+        }
+        Ok(_) => Ok(OutputKind::Special),
+    }
 }
 
 fn temporary_output(output: &Path) -> std::io::Result<tempfile::NamedTempFile> {

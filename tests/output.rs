@@ -62,3 +62,53 @@ fn successful_build_replaces_output() {
     let bytes = fs::read(&out).unwrap();
     assert_eq!(&bytes[..2], b"PK");
 }
+
+// GBS-036: special files are written in place, never replaced by the temp-file rename.
+#[cfg(unix)]
+#[test]
+fn dev_null_stays_a_device() {
+    use std::os::unix::fs::FileTypeExt;
+    let dir = tempfile::tempdir().unwrap();
+    let root = project(dir.path(), "costumes \"blank.svg\";\nonflag { say 1; }");
+    let null = std::path::PathBuf::from("/dev/null");
+    let artifact = build(Some(root), Some(null.clone()), &options(dir.path())).unwrap();
+    assert!(!artifact.failure());
+    assert!(fs::symlink_metadata(&null).unwrap().file_type().is_char_device());
+}
+
+#[cfg(unix)]
+#[test]
+fn fifo_output_receives_the_sb3() {
+    use std::{io::Read, os::unix::fs::FileTypeExt};
+    let dir = tempfile::tempdir().unwrap();
+    let fifo = dir.path().join("out.fifo");
+    assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+    let reader = {
+        let fifo = fifo.clone();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            fs::File::open(&fifo).unwrap().read_to_end(&mut bytes).unwrap();
+            bytes
+        })
+    };
+    let root = project(dir.path(), "costumes \"blank.svg\";\nonflag { say 1; }");
+    let artifact = build(Some(root), Some(fifo.clone()), &options(dir.path())).unwrap();
+    assert!(!artifact.failure());
+    let bytes = reader.join().unwrap();
+    assert!(bytes.starts_with(b"PK"), "an sb3 (zip) was written into the FIFO");
+    assert!(fs::symlink_metadata(&fifo).unwrap().file_type().is_fifo());
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_output_is_refused_and_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("real.sb3");
+    fs::write(&target, b"previous").unwrap();
+    let link = dir.path().join("link.sb3");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let root = project(dir.path(), "costumes \"blank.svg\";\nonflag { say 1; }");
+    assert!(build(Some(root), Some(link.clone()), &options(dir.path())).is_err());
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&target).unwrap(), b"previous");
+}
