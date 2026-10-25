@@ -202,7 +202,12 @@ impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where S: serde::Serializer {
         match self {
-            Value::Boolean(boolean) => serializer.serialize_bool(*boolean),
+            // Written as text like a boolean literal in an input ("true"/"false").
+            Value::Boolean(boolean) => serializer.serialize_str(if *boolean {
+                "true"
+            } else {
+                "false"
+            }),
             Value::Number(number) if is_safe_integer(*number) => {
                 serializer.serialize_i64(*number as i64)
             }

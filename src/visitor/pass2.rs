@@ -403,6 +403,7 @@ fn visit_expr(expr: &mut Expr, s: S, d: D) {
     transformations::apply(expr, transformations::greater_than_equal);
     transformations::apply(expr, transformations::not_equal);
     transformations::apply(expr, transformations::floor_div);
+    transformations::apply(expr, transformations::boolean_arithmetic_operand);
     transformations::apply(expr, transformations::add_zero_left);
     transformations::apply(expr, transformations::add_zero_right);
     transformations::apply(expr, transformations::sub_zero);

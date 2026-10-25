@@ -297,6 +297,46 @@ pub fn floor_div(expr: &Expr) -> Option<Expr> {
     ))
 }
 
+/// Boolean literals are emitted as the text "true"/"false", which Scratch arithmetic would read
+/// as 0. In arithmetic, use the number a Scratch boolean converts to (1/0) instead.
+pub fn boolean_arithmetic_operand(expr: &Expr) -> Option<Expr> {
+    fn to_number(expr: &Expr) -> Option<Expr> {
+        let Expr::Value {
+            value: Value::Boolean(boolean),
+            span,
+        } = expr
+        else {
+            return None;
+        };
+        Some(Value::from(if *boolean { 1.0 } else { 0.0 }).to_expr(span.clone()))
+    }
+    match expr {
+        Expr::BinOp {
+            op: op @ (BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod),
+            span,
+            lhs,
+            rhs,
+        } => {
+            let new_lhs = to_number(lhs);
+            let new_rhs = to_number(rhs);
+            if new_lhs.is_none() && new_rhs.is_none() {
+                return None;
+            }
+            Some(op.to_expr(
+                span.clone(),
+                new_lhs.unwrap_or_else(|| lhs.as_ref().clone()),
+                new_rhs.unwrap_or_else(|| rhs.as_ref().clone()),
+            ))
+        }
+        Expr::UnOp { op, span, opr }
+            if !matches!(op, UnOp::Not | UnOp::Length) =>
+        {
+            Some(op.to_expr(span.clone(), to_number(opr)?))
+        }
+        _ => None,
+    }
+}
+
 pub fn add_zero_left(expr: &Expr) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::Add,

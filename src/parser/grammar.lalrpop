@@ -502,8 +502,8 @@ IfBinExpr: Expr = {
 
 Term: Expr = {
     "(" <Expr> ")",
-    <l:@L> TRUE      <r:@R> => Value::from(1.0).to_expr(l..r),
-    <l:@L> FALSE     <r:@R> => Value::from(0.0).to_expr(l..r),
+    <l:@L> TRUE      <r:@R> => Value::from(true).to_expr(l..r),
+    <l:@L> FALSE     <r:@R> => Value::from(false).to_expr(l..r),
     <l:@L> <v:INT>   <r:@R> => Value::from(v).to_expr(l..r),
     <l:@L> <v:HEX>   <r:@R> => Value::from(v).to_expr(l..r),
     <l:@L> <v:OCT>   <r:@R> => Value::from(v).to_expr(l..r),
@@ -542,8 +542,8 @@ StructLiteralField: StructLiteralField = {
 };
 
 Value: (Value, Span) = {
-    <l:@L> TRUE      <r:@R> => (Value::from(1.0), l..r),
-    <l:@L> FALSE     <r:@R> => (Value::from(0.0), l..r),
+    <l:@L> TRUE      <r:@R> => (Value::from(true), l..r),
+    <l:@L> FALSE     <r:@R> => (Value::from(false), l..r),
     <l:@L> <v:INT>   <r:@R> => (Value::from(v), l..r),
     <l:@L> <v:HEX>   <r:@R> => (Value::from(v), l..r),
     <l:@L> <v:OCT>   <r:@R> => (Value::from(v), l..r),

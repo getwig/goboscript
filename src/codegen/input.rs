@@ -75,7 +75,16 @@ pub fn coerce_condition<'a>(expr: &'a Expr, s: S) -> Cow<'a, Expr> {
     if is_expr_boolean(expr, s) {
         return Cow::Borrowed(expr);
     }
-    Cow::Owned(BinOp::Eq.to_expr(0..0, expr.clone(), Value::from(true).to_expr(0..0)))
+    // `if x` means `if x == 1`; a (folded) boolean literal is compared as 1/0 since it would
+    // otherwise be written as the text "true"/"false".
+    let expr = match expr {
+        Expr::Value {
+            value: Value::Boolean(boolean),
+            span,
+        } => Value::from(if *boolean { 1.0 } else { 0.0 }).to_expr(span.clone()),
+        expr => expr.clone(),
+    };
+    Cow::Owned(BinOp::Eq.to_expr(0..0, expr, Value::from(1.0).to_expr(0..0)))
 }
 
 impl Sb3 {
@@ -127,8 +136,9 @@ impl Sb3 {
 
     fn value_input(&mut self, name: &str, value: &Value) -> io::Result<()> {
         match value {
+            // Scratch has no boolean literal; a boolean shows and joins as "true"/"false".
             Value::Boolean(boolean) => {
-                write!(self.json, "[1,[4,{}]]", json!(*boolean as i64))
+                write!(self.json, "[1,[10,{}]]", json!(boolean.to_string()))
             }
             Value::Number(number) if number.is_infinite() || number.is_nan() => match number {
                 n if n.is_infinite() && *n > 0.0 => {
