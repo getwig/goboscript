@@ -414,7 +414,7 @@ fn visit_expr(expr: &mut Expr, s: S, d: D) {
     transformations::apply(expr, |expr| transformations::less_than_equal(expr, s.fold));
     transformations::apply(expr, |expr| transformations::greater_than_equal(expr, s.fold));
     transformations::apply(expr, |expr| transformations::not_equal(expr, s.fold));
-    transformations::apply(expr, transformations::floor_div);
+    transformations::apply(expr, |expr| transformations::floor_div(expr, s.fold));
     transformations::apply(expr, transformations::boolean_arithmetic_operand);
     if s.fold {
         transformations::apply(expr, transformations::add_zero_left);

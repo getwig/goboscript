@@ -308,7 +308,7 @@ pub fn not_equal(expr: &Expr, fold: bool) -> Option<Expr> {
     Some(UnOp::Not.to_expr(span.clone(), inner))
 }
 
-pub fn floor_div(expr: &Expr) -> Option<Expr> {
+pub fn floor_div(expr: &Expr, fold: bool) -> Option<Expr> {
     let Expr::BinOp {
         op: BinOp::FloorDiv,
         span,
@@ -318,10 +318,12 @@ pub fn floor_div(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
-    Some(UnOp::Floor.to_expr(
-        span.clone(),
-        BinOp::Div.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone()),
-    ))
+    let mut inner = BinOp::Div.to_expr(span.clone(), lhs.as_ref().clone(), rhs.as_ref().clone());
+    // fold the new division, so constant operands fold through the rewrite (like `<=`)
+    if fold {
+        apply(&mut inner, bin_op);
+    }
+    Some(UnOp::Floor.to_expr(span.clone(), inner))
 }
 
 /// Boolean literals are emitted as the text "true"/"false", which Scratch arithmetic would read

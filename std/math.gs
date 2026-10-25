@@ -54,7 +54,9 @@
 %define CLAMP(VALUE,MIN,MAX) ((VALUE)*(((VALUE)>=(MIN))*((VALUE)<=(MAX)))+(MIN)*((VALUE)<(MIN))+(MAX)*((VALUE)>(MAX)))
 
 # Return the `N`th bit of `V`'s binary representation.
-%define BIT(N,V) (((V) // antiln((N) * ln 2) % 2))
+# 2^N is the product of two rounded powers of two of at most N/2 + 1 bits each, so it is exact
+# for 0 <= N <= 80 (antiln(N * ln 2) alone is not a power of two for N >= 22, GBS-037).
+%define BIT(N,V) (((V) // (round(antiln(floor((N) / 2) * ln 2)) * round(antiln(((N) - floor((N) / 2)) * ln 2))) % 2))
 
 # Linearly interpolate between `A` and `B` by `T`.
 %define LERP(A,B,T) ((A)+((B)-(A))*(T))

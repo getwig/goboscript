@@ -113,3 +113,18 @@ fn hyperbolic_and_power_functions() {
         ("BIN(\"101\")", 5.0),
     ]);
 }
+
+// GBS-037: BIT(N, V) divided by antiln(N * ln 2), which is not an exact power of two for N >= 22
+// (e.g. BIT(22, 2^22) was 0).
+#[test]
+fn bit_is_exact_up_to_bit_51() {
+    let mut cases: Vec<(String, f64)> = vec![];
+    for n in 0..=51u32 {
+        let p = 2f64.powi(n as i32);
+        cases.push((format!("BIT({n}, {p})"), 1.0));
+        cases.push((format!("BIT({n}, {})", p - 1.0), 0.0));
+        cases.push((format!("BIT({n}, {})", p * 3.0), 1.0));
+    }
+    let refs: Vec<(&str, f64)> = cases.iter().map(|(e, v)| (e.as_str(), *v)).collect();
+    check(&refs);
+}
