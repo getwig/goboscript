@@ -202,12 +202,9 @@ impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where S: serde::Serializer {
         match self {
-            // Written as text like a boolean literal in an input ("true"/"false").
-            Value::Boolean(boolean) => serializer.serialize_str(if *boolean {
-                "true"
-            } else {
-                "false"
-            }),
+            // A JSON boolean: variable and list initial values are real Scratch booleans (the
+            // vanilla VM loads and saves them as such; GBS-035). Inputs never use this path.
+            Value::Boolean(boolean) => serializer.serialize_bool(*boolean),
             Value::Number(number) if is_safe_integer(*number) => {
                 serializer.serialize_i64(*number as i64)
             }

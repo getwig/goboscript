@@ -48,5 +48,9 @@ fn safe_simplifications_still_apply() {
 fn rewritten_comparisons_fold() {
     let b = build_main("onflag { say 1 <= 2; say 3 >= 4; say 1 != 1; }");
     assert_eq!(count(&b, "operator_not"), 0);
-    assert_eq!(count(&b, "operator_gt") + count(&b, "operator_lt") + count(&b, "operator_equals"), 0);
+    assert_eq!(count(&b, "operator_gt") + count(&b, "operator_lt"), 0);
+    // the folded results are boolean literals: `<(1) = (1)>` / `<(0) = (1)>` (GBS-035)
+    for eq in b.blocks("main", "operator_equals") {
+        assert_eq!(eq["inputs"]["OPERAND2"], json!([1, [10, "1"]]));
+    }
 }

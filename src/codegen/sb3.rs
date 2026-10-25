@@ -358,6 +358,27 @@ impl Sb3 {
         self.json.write_all(b"}")
     }
 
+    /// A boolean literal as a real Scratch boolean (GBS-035): Scratch inputs cannot hold JSON
+    /// booleans, and the text "true"/"false" casts to 0 and is not equal to 1, so `x = true`
+    /// followed by `if x` or `x + 1` would go wrong. `true` is `<(1) = (1)>`, `false` is
+    /// `<(0) = (1)>`: one block, a JS boolean at runtime (shows and joins as "true"/"false").
+    pub fn boolean_literal(
+        &mut self,
+        this_id: NodeID,
+        parent_id: NodeID,
+        boolean: bool,
+    ) -> io::Result<()> {
+        self.begin_node(Node::new("operator_equals", this_id).parent_id(parent_id))?;
+        self.begin_inputs()?;
+        write!(
+            self.json,
+            r#""OPERAND1":[1,[10,"{}"]],"OPERAND2":[1,[10,"1"]]"#,
+            if boolean { 1 } else { 0 }
+        )?;
+        self.end_obj()?; // inputs
+        self.end_obj() // node
+    }
+
     pub fn begin_inputs(&mut self) -> io::Result<()> {
         self.inputs_comma = false;
         self.json.write_all(br#","inputs":{"#)
@@ -1329,6 +1350,10 @@ impl Sb3 {
             .blocks
             .insert(this_id.to_string(), expr.span().clone());
         match expr {
+            Expr::Value {
+                value: Value::Boolean(boolean),
+                ..
+            } => self.boolean_literal(this_id, parent_id, *boolean),
             Expr::Value { .. } => Ok(()),
             Expr::Name { .. } => Ok(()),
             Expr::Arg(name) => self.arg(s, d, this_id, parent_id, name),

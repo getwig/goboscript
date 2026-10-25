@@ -127,6 +127,11 @@ impl Sb3 {
         }
         write!(self.json, r#""{input_name}":"#)?;
         match expr {
+            // a boolean literal is a reporter block (see `boolean_literal`), not a primitive
+            Expr::Value {
+                value: Value::Boolean(_),
+                ..
+            } => {}
             Expr::Value { value, span: _ } => return self.value_input(input_name, value),
             Expr::Name(name) => return self.name_input(s, d, input_name, name, shadow_id),
             _ => {}
@@ -136,7 +141,7 @@ impl Sb3 {
 
     fn value_input(&mut self, name: &str, value: &Value) -> io::Result<()> {
         match value {
-            // Scratch has no boolean literal; a boolean shows and joins as "true"/"false".
+            // Not reached for inputs (`_input` emits a block); kept for completeness.
             Value::Boolean(boolean) => {
                 write!(self.json, "[1,[10,{}]]", json!(boolean.to_string()))
             }
