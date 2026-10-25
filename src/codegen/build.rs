@@ -57,6 +57,10 @@ pub struct BuildOptions {
     /// Do not detect AI agents: no `510P` marker in the Stage notes and no `AGENTS.md` written
     /// into the project directory, so the output does not depend on the environment (GBS-025).
     pub no_ai_detection: bool,
+    /// Do not add the Stage "notes" comment (goboscript logo, build info, notes file) (GBS-026).
+    pub no_stage_notes: bool,
+    /// Do not add the Stage `_twconfig_` comment with TurboWarp settings (GBS-026).
+    pub no_turbowarp_config: bool,
 }
 
 pub fn build_impl<T: Write + Seek>(
@@ -191,6 +195,8 @@ pub fn build_impl<T: Write + Seek>(
     log::info!("{:#?}", project);
     let mut sb3 = Sb3::new(fs.clone(), input.clone());
     sb3.ai_detection = !options.no_ai_detection;
+    sb3.stage_notes = !options.no_stage_notes;
+    sb3.turbowarp_config = !options.no_turbowarp_config;
     sb3.project(
         fs.clone(),
         &input,

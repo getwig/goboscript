@@ -321,6 +321,10 @@ pub struct Sb3 {
     extensions: Extensions,
     /// Detect AI agents for the Stage notes marker (may write `AGENTS.md` into the project).
     pub ai_detection: bool,
+    /// Emit the Stage "notes" comment (goboscript logo, build info, notes file).
+    pub stage_notes: bool,
+    /// Emit the Stage `_twconfig_` comment with TurboWarp settings.
+    pub turbowarp_config: bool,
 }
 
 impl Sb3 {
@@ -334,6 +338,8 @@ impl Sb3 {
             asset_object_store: AssetObjectStore::new(input, fs),
             extensions: Extensions::default(),
             ai_detection: true,
+            stage_notes: true,
+            turbowarp_config: true,
         }
     }
 
@@ -572,20 +578,28 @@ impl Sb3 {
         write!(self.json, r#""isStage":{}"#, name == STAGE_NAME)?;
         write!(self.json, r#","name":{}"#, json!(name))?;
         if name == STAGE_NAME {
-            let notes = read_notes(&mut *fs.borrow_mut(), input, config)?;
-            let is_ai = self.ai_detection && is_ai_project(&mut *fs.borrow_mut(), input);
-            let notes = build_notes_comment(&notes, is_ai);
             write!(self.json, r#","comments":{{"#)?;
-            self.comment("notes", 0, 0, NOTES_WIDTH, NOTES_HEIGHT, &notes)?;
-            write!(self.json, ",")?;
-            self.comment(
-                "twconfig",
-                0,
-                NOTES_HEIGHT + COMMENT_GAP,
-                240,
-                120,
-                &TurbowarpConfig::from(config).to_string(),
-            )?;
+            let mut twconfig_y = 0;
+            if self.stage_notes {
+                let notes = read_notes(&mut *fs.borrow_mut(), input, config)?;
+                let is_ai = self.ai_detection && is_ai_project(&mut *fs.borrow_mut(), input);
+                let notes = build_notes_comment(&notes, is_ai);
+                self.comment("notes", 0, 0, NOTES_WIDTH, NOTES_HEIGHT, &notes)?;
+                twconfig_y = NOTES_HEIGHT + COMMENT_GAP;
+            }
+            if self.turbowarp_config {
+                if self.stage_notes {
+                    write!(self.json, ",")?;
+                }
+                self.comment(
+                    "twconfig",
+                    0,
+                    twconfig_y,
+                    240,
+                    120,
+                    &TurbowarpConfig::from(config).to_string(),
+                )?;
+            }
             write!(self.json, "}}")?; // comments
         }
         write!(self.json, r#","broadcasts":{{"#)?;

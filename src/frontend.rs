@@ -29,6 +29,8 @@ pub fn frontend() -> ExitCode {
             deny_unsafe_locals,
             std_path,
             no_ai_detection,
+            no_stage_notes,
+            no_turbowarp_config,
         } => match build::build(
             input,
             output,
@@ -36,6 +38,8 @@ pub fn frontend() -> ExitCode {
                 deny_unsafe_locals,
                 std_path,
                 no_ai_detection,
+                no_stage_notes,
+                no_turbowarp_config,
             },
         ) {
             Ok(artifact) => {

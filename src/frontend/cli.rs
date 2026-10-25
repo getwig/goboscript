@@ -51,6 +51,12 @@ pub enum Command {
         /// project directory).
         #[arg(long)]
         no_ai_detection: bool,
+        /// Do not add the Stage "notes" comment (goboscript logo, build info, notes file).
+        #[arg(long)]
+        no_stage_notes: bool,
+        /// Do not add the Stage `_twconfig_` comment (TurboWarp settings, ignored by Scratch).
+        #[arg(long)]
+        no_turbowarp_config: bool,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a
