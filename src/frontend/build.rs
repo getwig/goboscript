@@ -14,6 +14,7 @@ use crate::{
             build_impl,
             BuildOptions,
         },
+        ast_dump::ast_dump,
         source_map::source_map,
     },
     diagnostic::Artifact,
@@ -44,6 +45,14 @@ pub fn build(
                 .and_then(|std_path| std_path.canonicalize().ok());
             let map = source_map(&artifact, &canonical_input, std_path.as_deref(), &mut RealFS);
             std::fs::write(debug_info, serde_json::to_vec_pretty(&map)?)?;
+        }
+        if let Some(dump_ast) = &options.dump_ast {
+            let std_path = options
+                .std_path
+                .as_ref()
+                .and_then(|std_path| std_path.canonicalize().ok());
+            let dump = ast_dump(&artifact, &canonical_input, std_path.as_deref(), &mut RealFS);
+            std::fs::write(dump_ast, serde_json::to_vec(&dump)?)?;
         }
     }
     Ok(artifact)

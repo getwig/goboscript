@@ -34,6 +34,7 @@ pub fn frontend() -> ExitCode {
             debug_info,
             stable_ids,
             no_fold,
+            dump_ast,
         } => match build::build(
             input,
             output,
@@ -46,6 +47,7 @@ pub fn frontend() -> ExitCode {
                 debug_info,
                 stable_ids,
                 no_fold,
+                dump_ast,
             },
         ) {
             Ok(artifact) => {

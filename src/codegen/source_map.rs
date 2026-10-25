@@ -48,6 +48,87 @@ impl SourceFile {
     }
 }
 
+/// Maps translation-unit spans to `.gs` file locations (shared by the source map and the AST
+/// dump).
+pub struct Locator<'a> {
+    input: &'a Path,
+    std_path: Option<&'a Path>,
+    files: FxHashMap<std::path::PathBuf, Option<SourceFile>>,
+}
+
+impl<'a> Locator<'a> {
+    pub fn new(input: &'a Path, std_path: Option<&'a Path>) -> Self {
+        Self {
+            input,
+            std_path,
+            files: Default::default(),
+        }
+    }
+
+    /// `{file, owner, line, column, endLine, endColumn}` of the span `start..end` of `unit`
+    /// (1-based lines and columns, end column exclusive), or None for generated spans (0..0)
+    /// and spans outside the unit.
+    pub fn locate(
+        &mut self,
+        unit: &crate::translation_unit::TranslationUnit,
+        span_start: usize,
+        span_end: usize,
+        fs: &mut dyn VFS,
+    ) -> Option<Value> {
+        if span_start == 0 && span_end == 0 || span_start >= unit.text.len() {
+            return None;
+        }
+        let (start, include) = unit.translate_position(span_start);
+        let end_position = span_end.max(span_start + 1) - 1;
+        let end = if include.unit_range.contains(&end_position) {
+            start + (end_position - span_start)
+        } else {
+            start
+        };
+        let file = self
+            .files
+            .entry(include.path.clone())
+            .or_insert_with(|| fs.read_to_string(&include.path).ok().map(SourceFile::new));
+        let file = file.as_ref()?;
+        let (line, column) = file.line_column(start);
+        let (end_line, end_column) = file.line_column(end);
+        let owner = match include.owner {
+            Owner::Local => "local",
+            Owner::StandardLibrary => "std",
+        };
+        let path = match include.owner {
+            Owner::Local => include
+                .path
+                .strip_prefix(self.input)
+                .unwrap_or(&include.path),
+            Owner::StandardLibrary => self
+                .std_path
+                .and_then(|std_path| include.path.strip_prefix(std_path).ok())
+                .or_else(|| include.path.file_name().map(Path::new))
+                .unwrap_or(&include.path),
+        };
+        Some(json!({
+            "file": path.to_string_lossy().replace('\\', "/"),
+            "owner": owner,
+            "line": line,
+            "column": column,
+            "endLine": end_line,
+            "endColumn": end_column + 1,
+        }))
+    }
+}
+
+/// Targets of `artifact` in source map order: the Stage first, then sprites by name.
+pub fn targets_of(artifact: &Artifact) -> Vec<(&str, &SpriteDiagnostics)> {
+    let mut sprites: Vec<(&str, &SpriteDiagnostics)> = vec![("Stage", &artifact.stage_diagnostics)];
+    let mut names: Vec<_> = artifact.sprites_diagnostics.keys().collect();
+    names.sort();
+    for name in names {
+        sprites.push((name.as_str(), &artifact.sprites_diagnostics[name]));
+    }
+    sprites
+}
+
 /// Build the source map of `artifact`. File paths are relative to the project directory
 /// `input`; standard library files are marked `"owner": "std"` and are relative to `std_path`
 /// when given (otherwise only the file name is kept). Generated blocks without a source
@@ -58,60 +139,17 @@ pub fn source_map(
     std_path: Option<&Path>,
     fs: &mut dyn VFS,
 ) -> Value {
-    let mut files: FxHashMap<std::path::PathBuf, Option<SourceFile>> = Default::default();
+    let mut locator = Locator::new(input, std_path);
     let mut targets = Map::new();
-    let mut sprites: Vec<(&str, &SpriteDiagnostics)> = vec![("Stage", &artifact.stage_diagnostics)];
-    let mut names: Vec<_> = artifact.sprites_diagnostics.keys().collect();
-    names.sort();
-    for name in names {
-        sprites.push((name.as_str(), &artifact.sprites_diagnostics[name]));
-    }
-    for (target_name, diagnostics) in sprites {
+    for (target_name, diagnostics) in targets_of(artifact) {
         let unit = &diagnostics.translation_unit;
         let mut ids: Vec<_> = diagnostics.debug_info.blocks.iter().collect();
         ids.sort_by(|a, b| a.0.cmp(b.0));
         let mut blocks = Map::new();
         for (id, span) in ids {
-            if span.start == 0 && span.end == 0 || span.start >= unit.text.len() {
-                continue;
+            if let Some(location) = locator.locate(unit, span.start, span.end, fs) {
+                blocks.insert(id.trim_matches('"').to_string(), location);
             }
-            let (start, include) = unit.translate_position(span.start);
-            let end_position = span.end.max(span.start + 1) - 1;
-            let end = if include.unit_range.contains(&end_position) {
-                start + (end_position - span.start)
-            } else {
-                start
-            };
-            let file = files.entry(include.path.clone()).or_insert_with(|| {
-                fs.read_to_string(&include.path).ok().map(SourceFile::new)
-            });
-            let Some(file) = file else {
-                continue;
-            };
-            let (line, column) = file.line_column(start);
-            let (end_line, end_column) = file.line_column(end);
-            let owner = match include.owner {
-                Owner::Local => "local",
-                Owner::StandardLibrary => "std",
-            };
-            let path = match include.owner {
-                Owner::Local => include.path.strip_prefix(input).unwrap_or(&include.path),
-                Owner::StandardLibrary => std_path
-                    .and_then(|std_path| include.path.strip_prefix(std_path).ok())
-                    .or_else(|| include.path.file_name().map(Path::new))
-                    .unwrap_or(&include.path),
-            };
-            blocks.insert(
-                id.trim_matches('"').to_string(),
-                json!({
-                    "file": path.to_string_lossy().replace('\\', "/"),
-                    "owner": owner,
-                    "line": line,
-                    "column": column,
-                    "endLine": end_line,
-                    "endColumn": end_column + 1,
-                }),
-            );
         }
         targets.insert(target_name.to_string(), json!({ "blocks": blocks }));
     }

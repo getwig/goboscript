@@ -4,6 +4,7 @@ pub mod build;
 mod cleanup;
 pub mod costumes;
 pub mod datalists;
+pub mod ast_dump;
 pub mod debug_info;
 pub mod event;
 pub mod expr;

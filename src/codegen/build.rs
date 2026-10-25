@@ -70,6 +70,9 @@ pub struct BuildOptions {
     /// operator in the source is emitted as a block and every procedure/function is kept, so
     /// the output means exactly what the source says (GBS-031, GBS-032, GBS-034, GBS-023).
     pub no_fold: bool,
+    /// Also write the parsed AST (before any compiler pass) with source locations to this
+    /// path (see `codegen::ast_dump`).
+    pub dump_ast: Option<PathBuf>,
 }
 
 pub fn build_impl<T: Write + Seek>(
@@ -174,8 +177,19 @@ pub fn build_impl<T: Write + Seek>(
             stage_diagnostics,
             sprites_diagnostics,
             block_count: 0,
+            parsed_ast: None,
         });
     }
+    let parsed_ast = if options.dump_ast.is_some() {
+        let mut targets = serde_json::Map::new();
+        targets.insert("stage".to_string(), serde_json::to_value(&project.stage)?);
+        for (name, sprite) in &project.sprites {
+            targets.insert(name.to_string(), serde_json::to_value(sprite)?);
+        }
+        Some(serde_json::Value::Object(targets))
+    } else {
+        None
+    };
     visitor::ternary::visit_project(&mut project);
     {
         let mut fs = fs.borrow_mut();
@@ -221,6 +235,7 @@ pub fn build_impl<T: Write + Seek>(
         stage_diagnostics,
         sprites_diagnostics,
         block_count: sb3.block_count,
+        parsed_ast,
     };
     if artifact.failure() {
         return Ok(artifact);

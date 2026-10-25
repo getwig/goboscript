@@ -69,6 +69,10 @@ pub enum Command {
         /// operator is emitted as a block and unused procedures/functions are kept.
         #[arg(long)]
         no_fold: bool,
+        /// Also write the parsed AST (before any compiler pass), with the source location of
+        /// every span, to this file as JSON.
+        #[arg(long, value_name = "PATH")]
+        dump_ast: Option<PathBuf>,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a

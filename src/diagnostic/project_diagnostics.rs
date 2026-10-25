@@ -21,6 +21,9 @@ pub struct Artifact {
     pub stage_diagnostics: SpriteDiagnostics,
     pub sprites_diagnostics: FxHashMap<SmolStr, SpriteDiagnostics>,
     pub block_count: usize,
+    /// The parsed AST before any compiler pass (`{"stage": .., <sprite>: ..}`), captured only
+    /// for `--dump-ast`.
+    pub parsed_ast: Option<serde_json::Value>,
 }
 
 impl Artifact {
