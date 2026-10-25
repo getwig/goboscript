@@ -17,19 +17,26 @@ use std::{
 };
 
 use crate::{
-    codegen::build::build_impl,
+    codegen::build::{
+        build_impl,
+        BuildOptions,
+    },
     diagnostic::Artifact,
     vfs::RealFS,
 };
 
-pub fn build(input: Option<PathBuf>, output: Option<PathBuf>) -> anyhow::Result<Artifact> {
+pub fn build(
+    input: Option<PathBuf>,
+    output: Option<PathBuf>,
+    options: &BuildOptions,
+) -> anyhow::Result<Artifact> {
     let input = input.unwrap_or_else(|| env::current_dir().unwrap());
     let canonical_input = input.canonicalize()?;
     let project_name = canonical_input.file_name().unwrap().to_str().unwrap();
     let output = output.unwrap_or_else(|| input.join(format!("{project_name}.sb3")));
     let fs = Rc::new(RefCell::new(RealFS));
     let file = BufWriter::new(open_output(&output)?);
-    build_impl(fs, canonical_input, file, None)
+    build_impl(fs, canonical_input, file, None, options)
 }
 
 fn open_output(path: &Path) -> io::Result<File> {

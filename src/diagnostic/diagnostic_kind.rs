@@ -127,6 +127,22 @@ pub enum DiagnosticKind {
     UnusedArg(SmolStr),
     UnusedStructField(SmolStr),
     FixedLengthListInvalid(f64),
+    /// A `local` variable that is shared by overlapping calls (GBS-029). Warning, or error when
+    /// `deny` is set (`--deny-unsafe-locals`).
+    UnsafeLocal {
+        name: SmolStr,
+        procedure: SmolStr,
+        reason: UnsafeLocalReason,
+        deny: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Tsify, Serialize, Deserialize)]
+pub enum UnsafeLocalReason {
+    /// The procedure is `nowarp`, so it can yield and another call can run in between.
+    NoWarp,
+    /// The procedure is on a call cycle, so a nested call overwrites the caller's value.
+    Recursive,
 }
 
 fn arguments(count: usize) -> String {
@@ -299,6 +315,19 @@ impl DiagnosticKind {
                 format!("duplicate variant {variant_name} in enum {enum_name}")
             }
             DiagnosticKind::EmptyStruct(name) => format!("struct {name} is empty"),
+            DiagnosticKind::UnsafeLocal {
+                name,
+                procedure,
+                reason,
+                ..
+            } => match reason {
+                UnsafeLocalReason::NoWarp => format!(
+                    "local variable {name} is shared by all calls of nowarp procedure {procedure}"
+                ),
+                UnsafeLocalReason::Recursive => format!(
+                    "local variable {name} is shared by all calls of recursive procedure {procedure}"
+                ),
+            },
             DiagnosticKind::FixedLengthListInvalid(value) => {
                 if *value < 0_f64 {
                     return "list length cannot be negative".to_string();
@@ -319,6 +348,12 @@ impl DiagnosticKind {
 
     pub fn help(&self, sprite: &Sprite) -> Option<String> {
         match self {
+            DiagnosticKind::UnsafeLocal { .. } => Some(
+                "locals are one variable per procedure, not per call; another call that runs \
+                 while this one is active overwrites the value. Use a list as a stack, or \
+                 make the procedure warp and non-recursive"
+                    .to_string(),
+            ),
             DiagnosticKind::NoCostumes => {
                 Some("if this is a header, move it inside a directory such as `lib/`".to_string())
             }
@@ -501,6 +536,9 @@ impl From<&DiagnosticKind> for Level {
             | DiagnosticKind::LocalNotSupported
             | DiagnosticKind::FixedLengthListInvalid(..)
             | DiagnosticKind::UnknownDirective(_) => Level::Error,
+
+            DiagnosticKind::UnsafeLocal { deny: true, .. } => Level::Error,
+            DiagnosticKind::UnsafeLocal { deny: false, .. } => Level::Warning,
 
             | DiagnosticKind::FollowedByUnreachableCode
             | DiagnosticKind::InvalidCostumeName(_)

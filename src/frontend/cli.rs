@@ -39,6 +39,10 @@ pub enum Command {
         #[arg(short, long)]
         /// Output file, if not given, it will be the project directory's name + `.sb3`
         output: Option<PathBuf>,
+        /// Report `local` variables in nowarp or recursive procedures as errors instead of
+        /// warnings (they are shared by all calls of the procedure).
+        #[arg(long)]
+        deny_unsafe_locals: bool,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a

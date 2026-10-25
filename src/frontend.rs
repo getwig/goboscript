@@ -23,7 +23,17 @@ use crate::{
 
 pub fn frontend() -> ExitCode {
     match Cli::parse().command {
-        Command::Build { input, output } => match build::build(input, output) {
+        Command::Build {
+            input,
+            output,
+            deny_unsafe_locals,
+        } => match build::build(
+            input,
+            output,
+            &crate::codegen::build::BuildOptions {
+                deny_unsafe_locals,
+            },
+        ) {
             Ok(artifact) => {
                 artifact.eprint();
                 eprintln!();

@@ -14,7 +14,10 @@ use std::{
 };
 
 use libgoboscript::{
-    codegen::build::build_impl,
+    codegen::build::{
+        build_impl,
+        BuildOptions,
+    },
     diagnostic::Artifact,
     standard_library::StandardLibrary,
     vfs::RealFS,
@@ -34,6 +37,10 @@ pub struct Built {
 /// Build a project. `files` are (relative path, contents); `stage.gs` and `blank.svg` are added
 /// when missing. The standard library is an empty local directory (no network).
 pub fn build(files: &[(&str, &str)]) -> Built {
+    build_with(files, &BuildOptions::default())
+}
+
+pub fn build_with(files: &[(&str, &str)], options: &BuildOptions) -> Built {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("project");
     fs::create_dir_all(&root).unwrap();
@@ -50,10 +57,15 @@ pub fn build(files: &[(&str, &str)]) -> Built {
     fs::write(root.join("blank.svg"), BLANK_SVG).unwrap();
     let std_path = dir.path().join("std");
     fs::create_dir_all(&std_path).unwrap();
-    build_in(dir, root, std_path)
+    build_in(dir, root, std_path, options)
 }
 
-pub fn build_in(dir: tempfile::TempDir, root: PathBuf, std_path: PathBuf) -> Built {
+pub fn build_in(
+    dir: tempfile::TempDir,
+    root: PathBuf,
+    std_path: PathBuf,
+    options: &BuildOptions,
+) -> Built {
     let stdlib = StandardLibrary {
         version: Version::new(0, 0, 0),
         path: std_path,
@@ -64,6 +76,7 @@ pub fn build_in(dir: tempfile::TempDir, root: PathBuf, std_path: PathBuf) -> Bui
         root.canonicalize().unwrap(),
         Cursor::new(&mut sb3),
         Some(stdlib),
+        options,
     )
     .expect("build_impl failed");
     let project = if sb3.is_empty() {

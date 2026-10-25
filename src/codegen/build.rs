@@ -45,11 +45,20 @@ use crate::{
     visitor,
 };
 
+/// Options that change what a build checks or emits. The defaults reproduce upstream behaviour.
+#[derive(Debug, Clone, Default)]
+pub struct BuildOptions {
+    /// Report `local` variables in nowarp or recursive procedures as errors instead of
+    /// warnings (GBS-029).
+    pub deny_unsafe_locals: bool,
+}
+
 pub fn build_impl<T: Write + Seek>(
     fs: Rc<RefCell<dyn VFS>>,
     input: PathBuf,
     file: T,
     stdlib: Option<StandardLibrary>,
+    options: &BuildOptions,
 ) -> anyhow::Result<Artifact> {
     let config_path = input.join("goboscript.toml");
     let config_src = fs
@@ -149,6 +158,12 @@ pub fn build_impl<T: Write + Seek>(
     );
     visitor::pass3::visit_project(&mut project);
     visitor::pass4::visit_project(&mut project);
+    visitor::unsafe_locals::visit_project(
+        &project,
+        &mut stage_diagnostics,
+        &mut sprites_diagnostics,
+        options.deny_unsafe_locals,
+    );
     log::info!("{:#?}", project);
     let mut sb3 = Sb3::new(fs.clone(), input.clone());
     sb3.project(

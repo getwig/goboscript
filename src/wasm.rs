@@ -20,7 +20,10 @@ use wasm_bindgen::{
 
 use crate::{
     ast::Sprite,
-    codegen::build::build_impl,
+    codegen::build::{
+        build_impl,
+        BuildOptions,
+    },
     diagnostic::{
         Artifact,
         Diagnostic,
@@ -56,7 +59,13 @@ pub fn build(fs: Ts<MemFS>) -> Result<Ts<Build>, JsError> {
         path: "stdlib".into(),
         version: Version::new(0, 0, 0),
     };
-    let artifact = build_impl(fs, "project".into(), Cursor::new(&mut file), Some(stdlib))
+    let artifact = build_impl(
+        fs,
+        "project".into(),
+        Cursor::new(&mut file),
+        Some(stdlib),
+        &BuildOptions::default(),
+    )
         .map_err(|error| JsError::new(&error.to_string()))?;
     Ok(Build { file, artifact }.into_ts()?)
 }
