@@ -41,33 +41,47 @@ const fn is_trimmable_whitespace(c: char) -> bool {
     )
 }
 
-pub fn parse_float(input_string: &str) -> f64 {
-    let s = input_string.trim_start_matches(is_trimmable_whitespace);
-    let s_prefix = s.chars().take(4).collect::<String>();
-    let s_prefix_lower = s_prefix.to_ascii_lowercase();
-    // TODO: write our own lexer to match syntax StrDecimalLiteral
-    if s.starts_with("Infinity") || s.starts_with("+Infinity") {
-        f64::INFINITY
-    } else if s.starts_with("-Infinity") {
-        f64::NEG_INFINITY
-    } else if s_prefix_lower.starts_with("inf")
-        || s_prefix_lower.starts_with("+inf")
-        || s_prefix_lower.starts_with("-inf")
-    {
-        // Prevent fast_float from parsing "inf", "+inf" as Infinity and "-inf" as -Infinity
-        f64::NAN
-    } else {
-        fast_float2::parse_partial::<f64, _>(s).map_or_else(
-            |_| f64::NAN,
-            |(f, len)| {
-                if len > 0 {
-                    f
-                } else {
-                    f64::NAN
-                }
-            },
-        )
+/// JavaScript `Number(string)` (ECMAScript StringToNumber), which Scratch uses to cast text to a
+/// number (`Cast.toNumber`, `Cast.compare`). Unlike `parseFloat`, the whole string must be a
+/// number: `Number("12abc")` is NaN, `Number("0x1f")` is 31, `Number(" ")` is 0.
+pub fn string_to_number(input_string: &str) -> f64 {
+    let s = input_string.trim_matches(is_trimmable_whitespace);
+    if s.is_empty() {
+        return 0.0;
     }
+    match s {
+        "Infinity" | "+Infinity" => return f64::INFINITY,
+        "-Infinity" => return f64::NEG_INFINITY,
+        _ => {}
+    }
+    let bytes = s.as_bytes();
+    if bytes.len() > 2 && bytes[0] == b'0' {
+        let radix = match bytes[1] {
+            b'x' | b'X' => Some(16),
+            b'o' | b'O' => Some(8),
+            b'b' | b'B' => Some(2),
+            _ => None,
+        };
+        if let Some(radix) = radix {
+            let mut value = 0.0;
+            for c in s[2..].chars() {
+                let Some(digit) = c.to_digit(radix) else {
+                    return f64::NAN;
+                };
+                value = value * radix as f64 + digit as f64;
+            }
+            return value;
+        }
+    }
+    // StrDecimalLiteral: sign, digits, optional fraction, optional exponent. Rust's parser
+    // also accepts "inf", "infinity" and "nan" in any case, which JavaScript does not.
+    if !s
+        .chars()
+        .all(|c| c.is_ascii_digit() || matches!(c, '.' | 'e' | 'E' | '+' | '-'))
+    {
+        return f64::NAN;
+    }
+    s.parse::<f64>().unwrap_or(f64::NAN)
 }
 
 /// `Number.prototype.toString()` (radix 10) as specified by ECMAScript
@@ -110,7 +124,37 @@ pub fn number_to_string(number: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::number_to_string;
+    use super::{
+        number_to_string,
+        string_to_number,
+    };
+
+    #[test]
+    fn string_to_number_matches_ecmascript() {
+        let cases: &[(&str, f64)] = &[
+            ("", 0.0),
+            ("  ", 0.0),
+            ("007", 7.0),
+            (" 12 ", 12.0),
+            ("1e3", 1000.0),
+            (".5", 0.5),
+            ("5.", 5.0),
+            ("-2.5", -2.5),
+            ("+3", 3.0),
+            ("0xff", 255.0),
+            ("0XFF", 255.0),
+            ("0b101", 5.0),
+            ("0o17", 15.0),
+            ("Infinity", f64::INFINITY),
+            ("-Infinity", f64::NEG_INFINITY),
+        ];
+        for (s, n) in cases {
+            assert_eq!(string_to_number(s), *n, "for {s:?}");
+        }
+        for s in ["12abc", "abc", "inf", "infinity", "NaN", "nan", "1e", "--1", "0x", "-0x1", "1_000", "0xfg"] {
+            assert!(string_to_number(s).is_nan(), "for {s:?}");
+        }
+    }
 
     #[test]
     fn number_to_string_matches_ecmascript() {

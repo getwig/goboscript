@@ -72,3 +72,17 @@ fn nan_is_computed_at_runtime_and_negative_zero_is_kept() {
     let b = build_main("onflag { say 1/4 + 1; }");
     assert_eq!(input(&b, "looks_say", "MESSAGE"), json!([1, [4, 1.25]]));
 }
+
+// GBS-031: constant folding casts text to numbers with JavaScript Number(), like Scratch.
+#[test]
+fn folding_casts_text_like_scratch() {
+    let b = build_main("onflag { say \"12abc\" + 1; say \"0x10\" + 1; say \" 2 \" * 3; say \"\" + 5; }");
+    let says: Vec<_> = b
+        .blocks("main", "looks_say")
+        .iter()
+        .map(|s| s["inputs"]["MESSAGE"][1][1].as_f64().unwrap())
+        .collect();
+    for expected in [1.0, 17.0, 6.0, 5.0] {
+        assert!(says.contains(&expected), "{expected} not in {says:?}");
+    }
+}

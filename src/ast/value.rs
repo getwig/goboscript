@@ -47,7 +47,7 @@ impl Value {
             Value::Boolean(true) => 1.0,
             Value::Number(number) if number.is_nan() => 0.0,
             Value::Number(number) => *number,
-            Value::String(string) => match js::parse_float(string) {
+            Value::String(string) => match js::string_to_number(string) {
                 number if number.is_nan() => 0.0,
                 number => number,
             },
@@ -59,7 +59,7 @@ impl Value {
             Value::Boolean(false) => 0.0,
             Value::Boolean(true) => 1.0,
             Value::Number(number) => *number,
-            Value::String(string) => js::parse_float(string),
+            Value::String(string) => js::string_to_number(string),
         }
     }
 
