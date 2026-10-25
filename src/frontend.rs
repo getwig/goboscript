@@ -28,12 +28,14 @@ pub fn frontend() -> ExitCode {
             output,
             deny_unsafe_locals,
             std_path,
+            no_ai_detection,
         } => match build::build(
             input,
             output,
             &crate::codegen::build::BuildOptions {
                 deny_unsafe_locals,
                 std_path,
+                no_ai_detection,
             },
         ) {
             Ok(artifact) => {

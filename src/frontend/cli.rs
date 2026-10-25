@@ -47,6 +47,10 @@ pub enum Command {
         /// (`%include std/math` reads `<STD_PATH>/math.gs`). No network access.
         #[arg(long, env = "GOBOSCRIPT_STD_PATH")]
         std_path: Option<PathBuf>,
+        /// Do not detect AI agents (no marker in the Stage notes, no AGENTS.md written into the
+        /// project directory).
+        #[arg(long)]
+        no_ai_detection: bool,
     },
 
     /// Create a new goboscript project with a blank backdrop, a main sprite with a

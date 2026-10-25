@@ -54,6 +54,9 @@ pub struct BuildOptions {
     /// Use the standard library in this directory (`%include std/x` reads `<dir>/x.gs`) instead
     /// of the per-user cache; nothing is fetched from the network (GBS-024).
     pub std_path: Option<PathBuf>,
+    /// Do not detect AI agents: no `510P` marker in the Stage notes and no `AGENTS.md` written
+    /// into the project directory, so the output does not depend on the environment (GBS-025).
+    pub no_ai_detection: bool,
 }
 
 pub fn build_impl<T: Write + Seek>(
@@ -187,6 +190,7 @@ pub fn build_impl<T: Write + Seek>(
     );
     log::info!("{:#?}", project);
     let mut sb3 = Sb3::new(fs.clone(), input.clone());
+    sb3.ai_detection = !options.no_ai_detection;
     sb3.project(
         fs.clone(),
         &input,

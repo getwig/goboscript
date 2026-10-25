@@ -319,6 +319,8 @@ pub struct Sb3 {
     pub block_count: usize,
     pub asset_object_store: AssetObjectStore,
     extensions: Extensions,
+    /// Detect AI agents for the Stage notes marker (may write `AGENTS.md` into the project).
+    pub ai_detection: bool,
 }
 
 impl Sb3 {
@@ -331,6 +333,7 @@ impl Sb3 {
             block_count: 0,
             asset_object_store: AssetObjectStore::new(input, fs),
             extensions: Extensions::default(),
+            ai_detection: true,
         }
     }
 
@@ -570,7 +573,8 @@ impl Sb3 {
         write!(self.json, r#","name":{}"#, json!(name))?;
         if name == STAGE_NAME {
             let notes = read_notes(&mut *fs.borrow_mut(), input, config)?;
-            let notes = build_notes_comment(&notes, is_ai_project(&mut *fs.borrow_mut(), input));
+            let is_ai = self.ai_detection && is_ai_project(&mut *fs.borrow_mut(), input);
+            let notes = build_notes_comment(&notes, is_ai);
             write!(self.json, r#","comments":{{"#)?;
             self.comment("notes", 0, 0, NOTES_WIDTH, NOTES_HEIGHT, &notes)?;
             write!(self.json, ",")?;
