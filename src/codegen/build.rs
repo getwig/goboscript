@@ -65,6 +65,9 @@ pub struct BuildOptions {
     pub debug_info: Option<PathBuf>,
     /// Derive block ids from the target, the enclosing script and the position in it instead
     /// of numbering all blocks of a target, so ids survive edits elsewhere (GBS-022).
+    /// Limitation (FORK-REVIEW-1 R1): ids are positional within a script (allocation order) and
+    /// same-hat scripts are keyed by ordinal, so after an edit an old id can name a different
+    /// block; consumers must verify opcode/fields.
     pub stable_ids: bool,
     /// Turn off constant folding, algebraic simplification and dead-code removal: every
     /// operator in the source is emitted as a block and every procedure/function is kept, so

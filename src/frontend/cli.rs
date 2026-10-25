@@ -62,7 +62,10 @@ pub enum Command {
         #[arg(long, value_name = "PATH")]
         debug_info: Option<PathBuf>,
         /// Derive block ids from the target, the enclosing script and the position in it, so
-        /// editing one script does not renumber the blocks of other scripts.
+        /// editing one script does not renumber the blocks of other scripts. Ids are positional:
+        /// after an edit inside a script, later blocks of that script get other ids and an old
+        /// id can name a different block; scripts with the same hat are told apart by their
+        /// order. Consumers must check opcode and fields before trusting an id across builds.
         #[arg(long)]
         stable_ids: bool,
         /// Turn off constant folding, algebraic simplifications and dead-code removal: every
