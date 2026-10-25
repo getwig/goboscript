@@ -2,11 +2,18 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     ast::*,
+    blocks::{
+        BinOp,
+        Repr,
+        UnOp,
+    },
     misc::SmolStr,
 };
 
 struct S<'a> {
     vars: &'a mut FxHashMap<SmolStr, Var>,
+    /// Field names of the struct lists visible here (sprite and Stage), for GBS-038.
+    struct_lists: &'a FxHashMap<SmolStr, Vec<SmolStr>>,
     callsites: &'a mut usize,
     funcs: &'a FxHashMap<SmolStr, Func>,
     func: Option<&'a Func>,
@@ -14,13 +21,42 @@ struct S<'a> {
 
 pub fn visit_project(project: &mut Project) {
     let mut callsites = 0;
-    visit_sprite(&mut project.stage, &mut callsites);
+    let stage_struct_lists = struct_lists(&project.stage, None);
+    visit_sprite(&mut project.stage, &mut callsites, &stage_struct_lists);
     for sprite in project.sprites.values_mut() {
-        visit_sprite(sprite, &mut callsites);
+        let lists = struct_lists(sprite, Some(&project.stage));
+        visit_sprite(sprite, &mut callsites, &lists);
     }
 }
 
-fn visit_sprite(sprite: &mut Sprite, callsites: &mut usize) {
+/// Struct-typed lists (name -> field names) of `sprite`, and of the Stage for a sprite.
+fn struct_lists(sprite: &Sprite, stage: Option<&Sprite>) -> FxHashMap<SmolStr, Vec<SmolStr>> {
+    let mut out = FxHashMap::default();
+    for owner in stage.into_iter().chain(std::iter::once(sprite)) {
+        for list in owner.lists.values() {
+            let Some((type_name, _)) = list.type_.struct_() else {
+                continue;
+            };
+            let struct_ = sprite
+                .structs
+                .get(type_name)
+                .or_else(|| stage.and_then(|stage| stage.structs.get(type_name)));
+            if let Some(struct_) = struct_ {
+                out.insert(
+                    list.name.clone(),
+                    struct_.fields.iter().map(|f| f.name.clone()).collect(),
+                );
+            }
+        }
+    }
+    out
+}
+
+fn visit_sprite(
+    sprite: &mut Sprite,
+    callsites: &mut usize,
+    struct_lists: &FxHashMap<SmolStr, Vec<SmolStr>>,
+) {
     let old_callsites = *callsites;
     for proc in sprite.procs.values_mut() {
         let proc_definition = sprite.proc_definitions.get_mut(&proc.name).unwrap();
@@ -28,6 +64,7 @@ fn visit_sprite(sprite: &mut Sprite, callsites: &mut usize) {
             proc_definition,
             &mut S {
                 vars: &mut sprite.vars,
+                struct_lists,
                 callsites,
                 funcs: &sprite.funcs,
                 func: None,
@@ -40,6 +77,7 @@ fn visit_sprite(sprite: &mut Sprite, callsites: &mut usize) {
             func_definition,
             &mut S {
                 vars: &mut sprite.vars,
+                struct_lists,
                 callsites,
                 funcs: &sprite.funcs,
                 func: Some(func),
@@ -51,6 +89,7 @@ fn visit_sprite(sprite: &mut Sprite, callsites: &mut usize) {
             &mut event.body,
             &mut S {
                 vars: &mut sprite.vars,
+                struct_lists,
                 callsites,
                 funcs: &sprite.funcs,
                 func: None,
@@ -63,6 +102,7 @@ fn visit_sprite(sprite: &mut Sprite, callsites: &mut usize) {
                     &mut vec![],
                     &mut S {
                         vars: &mut sprite.vars,
+                        struct_lists,
                         callsites,
                         funcs: &sprite.funcs,
                         func: None,
@@ -73,7 +113,7 @@ fn visit_sprite(sprite: &mut Sprite, callsites: &mut usize) {
         }
     }
     if *callsites != old_callsites {
-        visit_sprite(sprite, callsites);
+        visit_sprite(sprite, callsites, struct_lists);
     }
 }
 
@@ -134,18 +174,21 @@ fn visit_stmt(stmt: &mut Stmt, s: &mut S) -> Vec<Stmt> {
             hoist_struct_self_references(name, value, None, &mut before, s);
         }
         Stmt::DeleteList(_name) => {}
-        Stmt::DeleteListIndex { name: _, index } => {
+        Stmt::DeleteListIndex { name, index } => {
             visit_expr(index, &mut before, s);
+            hoist_struct_list_index(name, index, false, &mut before, s);
         }
         Stmt::InsertAtList { name, index, value } => {
             visit_expr(index, &mut before, s);
             visit_expr(value, &mut before, s);
             hoist_struct_self_references(name, value, Some(index), &mut before, s);
+            hoist_struct_list_index(name, index, true, &mut before, s);
         }
         Stmt::SetListIndex { name, index, value } => {
             visit_expr(index, &mut before, s);
             visit_expr(value, &mut before, s);
             hoist_struct_self_references(name, value, Some(index), &mut before, s);
+            hoist_struct_list_index(name, index, false, &mut before, s);
         }
         Stmt::Block {
             block: _,
@@ -387,6 +430,85 @@ fn hoist_struct_self_references(
     }
     if let Some(index) = index {
         hoist(index, before, s);
+    }
+}
+
+/// Evaluate `expr` into a new temporary variable before the statement; `expr` becomes the
+/// temporary.
+fn hoist_into_temp(expr: &mut Expr, before: &mut Vec<Stmt>, s: &mut S) {
+    *s.callsites += 1;
+    let span = expr.span();
+    let temp = Name::Name {
+        name: format!("@{}", *s.callsites).into(),
+        span: span.clone(),
+    };
+    s.vars.insert(
+        temp.basename().clone(),
+        Var {
+            name: temp.basename().clone(),
+            span: span.clone(),
+            type_: Type::Value,
+            default: None,
+            is_cloud: false,
+            is_used: true,
+        },
+    );
+    before.push(Stmt::SetVar {
+        name: temp.clone(),
+        value: Box::new(expr.clone()),
+        type_: Type::Value,
+        is_local: false,
+        is_cloud: false,
+    });
+    *expr = Expr::Name(temp);
+}
+
+/// An item operation on a struct list (`delete L[i]`, `insert v at L[i]`, `L[i] = v`) is one
+/// list operation per field, each with its own copy of the index. An index that is not a
+/// literal, variable or argument is evaluated once into a temporary, and the literal index
+/// "random"/"any" becomes `random(1, length L)` (`+ 1` for insert; the same
+/// single draw Scratch makes) in a temporary, so all fields address the same item (GBS-038).
+/// A variable that holds the text "random" still picks one item per field.
+fn hoist_struct_list_index(
+    name: &Name,
+    index: &mut Expr,
+    is_insert: bool,
+    before: &mut Vec<Stmt>,
+    s: &mut S,
+) {
+    if name.fieldname().is_some() {
+        return;
+    }
+    let Some(fields) = s.struct_lists.get(name.basename()) else {
+        return;
+    };
+    if fields.is_empty() {
+        return;
+    }
+    let span = index.span();
+    match index {
+        Expr::Value {
+            value: Value::String(text),
+            ..
+        } if text == "random" || text == "any" => {
+            // `length L` of a struct list is the length of its first field list
+            let list = Expr::Name(Name::Name {
+                name: name.basename().clone(),
+                span: name.basespan().clone(),
+            });
+            let mut high = UnOp::Length.to_expr(span.clone(), list);
+            if is_insert {
+                high = BinOp::Add.to_expr(span.clone(), high, Value::from(1.0).to_expr(span.clone()));
+            }
+            *index = Expr::Repr {
+                repr: Repr::Random,
+                span: span.clone(),
+                args: vec![Value::from(1.0).to_expr(span.clone()), high],
+            };
+            hoist_into_temp(index, before, s);
+        }
+        Expr::Value { .. } | Expr::Name(_) | Expr::Arg(_) => {}
+        _ => hoist_into_temp(index, before, s),
     }
 }
 

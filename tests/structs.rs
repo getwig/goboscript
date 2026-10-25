@@ -73,3 +73,35 @@ fn struct_list_item_assignment_uses_temporaries() {
         assert_eq!(r["inputs"]["ITEM"][1][0], json!(12), "item must read a temporary: {r}");
     }
 }
+
+// GBS-038: an item operation on a struct list is one operation per field; the index must be
+// evaluated once, otherwise `m[random(1, 6)] = P {..}` writes the fields to different items.
+#[test]
+fn struct_list_index_is_evaluated_once() {
+    let b = build_main(
+        "struct P { x, y }\nlist P m;\nvar i = 1;\n\
+         onflag { m[random(1, 6)] = P { x: 7, y: 8 }; insert P { x: 1, y: 2 } at m[i + 1]; \
+         delete m[\"random\"]; insert P { x: 3, y: 4 } at m[\"any\"]; m[i] = P { x: 5, y: 6 }; delete m[2]; }",
+    );
+    // one pick random per random index (the literal "random"/"any" become pick random too)
+    assert_eq!(b.blocks("main", "operator_random").len(), 3);
+    // every non-trivial index went into a temporary
+    let temps = b
+        .blocks("main", "data_setvariableto")
+        .iter()
+        .filter(|s| s["fields"]["VARIABLE"][0].as_str().unwrap().starts_with('@'))
+        .count();
+    assert_eq!(temps, 4);
+    // per-field operations read the temporary (or the plain variable / literal), never an expression
+    for opcode in ["data_replaceitemoflist", "data_insertatlist", "data_deleteoflist"] {
+        for block in b.blocks("main", opcode) {
+            let index = &block["inputs"]["INDEX"];
+            assert!(
+                index[1][0] == 12 || index[0] == 1,
+                "{opcode} index must be a variable or a literal: {index}"
+            );
+        }
+    }
+    // the literal "random" for delete is random(1, length of the first field list)
+    assert_eq!(b.blocks("main", "data_lengthoflist").len(), 2);
+}
