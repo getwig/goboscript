@@ -54,3 +54,21 @@ fn float_literals_keep_full_precision() {
     let size = input(&b, "looks_setsizeto", "SIZE")[1][1].as_f64().unwrap();
     assert_eq!(size.to_bits(), 111.00000000000001f64.to_bits());
 }
+
+// GBS-021: constant NaN is not folded into the text "NaN"; -0.0 keeps its sign.
+#[test]
+fn nan_is_computed_at_runtime_and_negative_zero_is_kept() {
+    let b = build_main("list items = [-0.0];\nvar z = -0.0;\nonflag { add 0/0 to items; say -0.0; say sqrt(-1); }");
+    assert!(b.list("main", "items")[0].as_f64().unwrap().is_sign_negative());
+    assert!(b.var("main", "z").as_f64().unwrap().is_sign_negative());
+    let div = b.blocks("main", "operator_divide");
+    assert_eq!(div.len(), 1, "0/0 must stay a division block");
+    assert_eq!(b.blocks("main", "operator_mathop").len(), 1, "sqrt(-1) must not be folded");
+    let says = b.blocks("main", "looks_say");
+    assert!(says.iter().any(|s| s["inputs"]["MESSAGE"][1][1]
+        .as_f64()
+        .is_some_and(|n| n == 0.0 && n.is_sign_negative())));
+    // ordinary constant folding still happens
+    let b = build_main("onflag { say 1/4 + 1; }");
+    assert_eq!(input(&b, "looks_say", "MESSAGE"), json!([1, [4, 1.25]]));
+}

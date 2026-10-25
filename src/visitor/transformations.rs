@@ -183,7 +183,13 @@ pub fn bin_op(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
-    Some(Value::bin_op(*op, lhs_value, rhs_value).to_expr(span.clone()))
+    let result = Value::bin_op(*op, lhs_value, rhs_value);
+    // NaN has no number literal in project.json (it would become the text "NaN"); keep the
+    // block so Scratch computes the NaN at runtime.
+    if result.number().is_some_and(f64::is_nan) {
+        return None;
+    }
+    Some(result.to_expr(span.clone()))
 }
 
 pub fn un_op(expr: &Expr) -> Option<Expr> {
@@ -196,7 +202,11 @@ pub fn un_op(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
-    Some(Value::un_op(*op, opr_value).to_expr(span.clone()))
+    let result = Value::un_op(*op, opr_value);
+    if result.number().is_some_and(f64::is_nan) {
+        return None;
+    }
+    Some(result.to_expr(span.clone()))
 }
 
 pub fn minus(expr: &Expr) -> Option<Expr> {
@@ -208,6 +218,14 @@ pub fn minus(expr: &Expr) -> Option<Expr> {
     else {
         return None;
     };
+    // A negated number literal is folded by `un_op` (keeps `-0.0` as negative zero).
+    if let Expr::Value {
+        value: Value::Number(_),
+        ..
+    } = opr.as_ref()
+    {
+        return None;
+    }
     Some(BinOp::Sub.to_expr(
         span.clone(),
         Value::from(0.0).to_expr(span.clone()),
